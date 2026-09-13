@@ -1,0 +1,11 @@
+# Project id placeholder — replace after `supabase link`
+project_id = "gpl"
+
+[api]
+enabled = true
+
+[db]
+major_version = 15
+
+[studio]
+enabled = true

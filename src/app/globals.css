@@ -1,26 +1,93 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Official GPL logo palette */
+  --gpl-teal: #2aa7ad;
+  --gpl-teal-deep: #1a7f84;
+  --gpl-gold: #f5b830;
+  --gpl-gold-soft: #ffcf5c;
+  --gpl-magenta: #d81b60;
+  --gpl-brown: #3e2723;
+  --gpl-cream: #fdf6e8;
+  --gpl-cream-deep: #f3e6cf;
+  --background: var(--gpl-cream);
+  --foreground: var(--gpl-brown);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
+  --color-gpl-teal: var(--gpl-teal);
+  --color-gpl-gold: var(--gpl-gold);
+  --color-gpl-magenta: var(--gpl-magenta);
+  --color-gpl-brown: var(--gpl-brown);
+  --color-gpl-cream: var(--gpl-cream);
+  --font-sans: var(--font-display);
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+body {
+  background:
+    radial-gradient(ellipse 90% 55% at 50% -15%, rgba(245, 184, 48, 0.28), transparent 55%),
+    radial-gradient(ellipse 70% 45% at 100% 0%, rgba(42, 167, 173, 0.14), transparent 50%),
+    var(--background);
+  color: var(--foreground);
+  font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  overflow-x: hidden;
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+::selection {
+  background: color-mix(in oklab, var(--gpl-gold) 55%, white);
+  color: var(--gpl-brown);
+}
+
+/* Shared form controls — inputs and selects stay the same height */
+.field,
+.field-select {
+  box-sizing: border-box;
+  height: 2.75rem;
+  width: 100%;
+  min-width: 0;
+  border-radius: 0.75rem;
+  border: 1px solid color-mix(in oklab, var(--gpl-brown) 15%, transparent);
+  background-color: var(--gpl-cream);
+  padding: 0 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--gpl-brown);
+  outline: none;
+}
+
+.field:focus,
+.field-select:focus {
+  box-shadow: 0 0 0 2px var(--gpl-teal);
+}
+
+.field:disabled,
+.field-select:disabled {
+  opacity: 0.6;
+}
+
+.field-select {
+  appearance: none;
+  padding-right: 2.5rem;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%233e2723' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='m4 6 4 4 4-4'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 1rem;
+}
+
+.field-select.field-inline {
+  width: auto;
+  min-width: 10rem;
+}
+
+/* Comfortable touch targets on mobile */
+@media (max-width: 767px) {
+  button,
+  a[role="button"],
+  .touch-target {
+    min-height: 44px;
+  }
 }
