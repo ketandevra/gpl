@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { PlayerIdCard } from "@/components/auth/PlayerIdCard";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { roleLabel, type SessionUser } from "@/lib/auth/permissions";
 import { compressImageFile } from "@/lib/images/compress-client";
 import { playerRoleLabel } from "@/lib/teams/labels";
+import type { TeamInviteView } from "@/lib/teams/types";
 import { verificationStatusLabel } from "@/lib/verification/helpers";
 import {
   REGISTRATION_PLAYER_ROLES,
@@ -28,12 +29,14 @@ export function ProfileClient({
   playingRole = null,
   tshirtSize = null,
   captainTeams = [],
+  invites = [],
 }: {
   user: SessionUser;
   playerId?: string | null;
   playingRole?: PlayerRole | null;
   tshirtSize?: TshirtSize | null;
   captainTeams?: CaptainTeam[];
+  invites?: TeamInviteView[];
 }) {
   const router = useRouter();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -43,12 +46,54 @@ export function ProfileClient({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [showIdCard, setShowIdCard] = useState(false);
+  const [pendingInvites, setPendingInvites] = useState(invites);
+  const [inviteBusy, setInviteBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    setPendingInvites(invites);
+  }, [invites]);
   const canShowIdCard =
     user.verification_status === "verified" && Boolean(playerId);
 
   const playingRoleLabelText =
     REGISTRATION_PLAYER_ROLES.find((r) => r.value === playingRole)?.label ??
     (playingRole ? playerRoleLabel(playingRole) : null);
+
+  async function respondToInvite(
+    inviteId: string,
+    decision: "accept" | "decline",
+  ) {
+    setInviteBusy(inviteId);
+    setError(null);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/invites", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "same-origin",
+        body: JSON.stringify({ invite_id: inviteId, decision }),
+      });
+      const data = (await res.json()) as {
+        error?: string;
+        invites?: TeamInviteView[];
+      };
+      if (!res.ok) {
+        setError(data.error ?? "Could not update invite.");
+        return;
+      }
+      setPendingInvites(data.invites ?? []);
+      setMessage(
+        decision === "accept"
+          ? "You joined the squad."
+          : "Invite declined. You were not added to the team.",
+      );
+      router.refresh();
+    } catch {
+      setError("Network error.");
+    } finally {
+      setInviteBusy(null);
+    }
+  }
 
   async function logout() {
     setLoading(true);
@@ -167,6 +212,55 @@ export function ProfileClient({
           </p>
         ) : null}
       </div>
+
+      {pendingInvites.length > 0 ? (
+        <section className="mt-4 rounded-2xl border border-[#f5b830]/50 bg-[#fff6df] p-4 shadow-sm">
+          <p className="text-sm font-semibold text-[#3e2723]">
+            Team invites
+          </p>
+          <p className="mt-1 text-xs text-[#3e2723]/60">
+            Accept to join the squad. If you decline, you will not be added.
+          </p>
+          <ul className="mt-3 space-y-3">
+            {pendingInvites.map((invite) => (
+              <li
+                key={invite.id}
+                className="rounded-xl border border-[#3e2723]/10 bg-white px-3 py-3"
+              >
+                <p className="font-semibold text-[#3e2723]">
+                  {invite.team_name}{" "}
+                  <span className="font-medium text-[#3e2723]/55">
+                    ({invite.team_short_name})
+                  </span>
+                </p>
+                <p className="mt-0.5 text-xs text-[#3e2723]/55">
+                  {invite.invited_by_name
+                    ? `${invite.invited_by_name} invited you to join this team.`
+                    : "You were invited to join this team."}
+                </p>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    disabled={inviteBusy !== null}
+                    onClick={() => void respondToInvite(invite.id, "accept")}
+                    className="rounded-full bg-[#2aa7ad] px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  >
+                    {inviteBusy === invite.id ? "Saving…" : "Accept"}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={inviteBusy !== null}
+                    onClick={() => void respondToInvite(invite.id, "decline")}
+                    className="rounded-full border border-[#3e2723]/20 px-4 py-2 text-sm font-semibold text-[#3e2723] disabled:opacity-50"
+                  >
+                    Decline
+                  </button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <dl className="mt-4 space-y-3 rounded-2xl border border-[#3e2723]/10 bg-white p-5 shadow-sm">
         <div>

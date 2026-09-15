@@ -1,5 +1,46 @@
--- Scoped Danger zone wipes (matches / teams / players / users / tournaments / verifications / all)
+-- Captain squad invites: player must accept before joining team_players.
 
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_type WHERE typname = 'team_invite_status'
+  ) THEN
+    CREATE TYPE team_invite_status AS ENUM (
+      'pending',
+      'accepted',
+      'declined',
+      'cancelled'
+    );
+  END IF;
+END
+$$;
+
+CREATE TABLE IF NOT EXISTS team_invites (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  team_id uuid NOT NULL REFERENCES teams (id) ON DELETE CASCADE,
+  player_id uuid NOT NULL REFERENCES players (id) ON DELETE CASCADE,
+  invited_by uuid REFERENCES users (id) ON DELETE SET NULL,
+  status team_invite_status NOT NULL DEFAULT 'pending',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  responded_at timestamptz
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS team_invites_pending_unique
+  ON team_invites (team_id, player_id)
+  WHERE status = 'pending';
+
+CREATE INDEX IF NOT EXISTS team_invites_player_status_idx
+  ON team_invites (player_id, status);
+
+CREATE INDEX IF NOT EXISTS team_invites_team_status_idx
+  ON team_invites (team_id, status);
+
+ALTER TABLE public.team_invites ENABLE ROW LEVEL SECURITY;
+
+COMMENT ON TABLE public.team_invites IS
+  'Squad join requests. A player is added to team_players only after they accept.';
+
+-- Keep danger-zone wipes in sync with the new table
 CREATE OR REPLACE FUNCTION public.clear_data_scope(
   p_scope text,
   p_keep_user_id uuid DEFAULT NULL
@@ -30,18 +71,15 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'Unknown scope');
   END IF;
 
-  -- Fixtures + scorecards
   IF v_scope IN ('matches', 'teams', 'tournaments', 'all') THEN
     TRUNCATE TABLE balls, innings, match_scorers, matches RESTART IDENTITY CASCADE;
   END IF;
 
-  -- Teams (matches already gone when required)
   IF v_scope IN ('teams', 'tournaments', 'all') THEN
     UPDATE players SET locked_team_id = NULL WHERE locked_team_id IS NOT NULL;
-    TRUNCATE TABLE team_players, teams RESTART IDENTITY CASCADE;
+    TRUNCATE TABLE team_invites, team_players, teams RESTART IDENTITY CASCADE;
   END IF;
 
-  -- Player registry
   IF v_scope IN ('players', 'tournaments', 'all') THEN
     UPDATE innings
     SET striker_id = NULL, non_striker_id = NULL, bowler_id = NULL
@@ -53,7 +91,7 @@ BEGIN
       bowler_id = NULL,
       dismissed_player_id = NULL
     WHERE id IS NOT NULL;
-    TRUNCATE TABLE team_players RESTART IDENTITY CASCADE;
+    TRUNCATE TABLE team_invites, team_players RESTART IDENTITY CASCADE;
     DELETE FROM players WHERE id IS NOT NULL;
   END IF;
 
@@ -85,6 +123,7 @@ BEGIN
   IF v_scope IN ('users', 'all') THEN
     UPDATE teams SET manager_id = NULL WHERE manager_id IS NOT NULL;
     UPDATE players SET user_id = NULL WHERE user_id IS NOT NULL;
+    UPDATE team_invites SET invited_by = NULL WHERE invited_by IS NOT NULL;
     DELETE FROM match_scorers
     WHERE user_id <> v_admin_id
       AND (p_keep_user_id IS NULL OR user_id <> p_keep_user_id);
@@ -142,19 +181,5 @@ $$;
 
 REVOKE ALL ON FUNCTION public.clear_data_scope(text, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.clear_data_scope(text, uuid) TO service_role;
-
-CREATE OR REPLACE FUNCTION public.clear_all_keep_admin()
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  RETURN public.clear_data_scope('all', NULL);
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.clear_all_keep_admin() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.clear_all_keep_admin() TO service_role;
 
 NOTIFY pgrst, 'reload schema';

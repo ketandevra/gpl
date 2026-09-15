@@ -11,11 +11,16 @@ import { writeAuditLog } from "@/lib/auth/audit";
 import { adminRest, RestError, withRetry } from "@/lib/supabase/rest";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import type { LoginInput, RegisterInput } from "@/lib/validations/auth";
-import type { UserRole } from "@/lib/types/database";
+import type { UserRole, VerificationStatus } from "@/lib/types/database";
 
 export type AuthSuccess = {
   ok: true;
-  user: { id: string; name: string; role: UserRole };
+  user: {
+    id: string;
+    name: string;
+    role: UserRole;
+    verification_status: VerificationStatus;
+  };
   session: { token: string; expiresAt: Date };
 };
 
@@ -35,6 +40,7 @@ type UserAuthRow = {
   pin_hash: string;
   failed_login_attempts: number;
   locked_until: string | null;
+  verification_status: VerificationStatus;
 };
 
 function requireSupabase(): AuthFailure | null {
@@ -93,7 +99,7 @@ export async function loginWithPin(
   try {
     users = await withRetry(() =>
       adminRest<UserAuthRow[]>("users", {
-        query: `?mobile_number=eq.${encodeURIComponent(input.mobile_number)}&select=id,name,role,is_active,pin_hash,failed_login_attempts,locked_until`,
+        query: `?mobile_number=eq.${encodeURIComponent(input.mobile_number)}&select=id,name,role,is_active,pin_hash,failed_login_attempts,locked_until,verification_status`,
       }),
     );
   } catch (err) {
@@ -202,6 +208,7 @@ export async function loginWithPin(
       id: user.id,
       name: user.name,
       role: user.role,
+      verification_status: user.verification_status ?? "unverified",
     },
     session,
   };
@@ -283,6 +290,7 @@ export async function registerWithPin(
         id: user.id,
         name: user.name,
         role: user.role,
+        verification_status: "unverified",
       },
       session,
     };

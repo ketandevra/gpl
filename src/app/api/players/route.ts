@@ -8,8 +8,6 @@ import {
 } from "@/lib/teams/queries";
 import { createTournamentPlayerSchema } from "@/lib/validations/teams";
 import { isSupabaseAdminConfigured } from "@/lib/supabase/env";
-import { adminRest, withRetry } from "@/lib/supabase/rest";
-import { ensureTournamentPlayerForUser } from "@/lib/verification/service";
 
 export async function GET(request: Request) {
   if (!isSupabaseAdminConfigured()) {
@@ -21,47 +19,33 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Please sign in." }, { status: 401 });
   }
 
-  const { searchParams } = new URL(request.url);
-  const excludeTeamId = searchParams.get("exclude_team_id") ?? undefined;
-  const q = (searchParams.get("q") ?? "").trim();
+  try {
+    const { searchParams } = new URL(request.url);
+    const excludeTeamId = searchParams.get("exclude_team_id") ?? undefined;
+    const q = (searchParams.get("q") ?? "").trim();
 
-  const tournament = await getActiveTournament();
-  if (!tournament) {
-    return NextResponse.json({ players: [], tournament: null });
-  }
+    const tournament = await getActiveTournament();
+    if (!tournament) {
+      return NextResponse.json({ players: [], tournament: null });
+    }
 
-  // Ensure tournament player rows exist for matching verified users (server-only).
-  type VerifiedUser = { id: string };
-  let verifiedUsers: VerifiedUser[] = [];
-  if (q) {
-    const encoded = encodeURIComponent(`*${q}*`);
-    verifiedUsers = await withRetry(() =>
-      adminRest<VerifiedUser[]>("users", {
-        query: `?verification_status=eq.verified&is_active=eq.true&role=neq.admin&or=(name.ilike.${encoded},mobile_number.ilike.${encoded})&select=id&limit=40`,
-      }),
+    const players = await searchVerifiedPlayersForPicker(tournament.id, {
+      excludeTeamId,
+      q,
+      limit: 40,
+    });
+
+    return NextResponse.json({
+      tournament: { id: tournament.id, name: tournament.name },
+      players,
+    });
+  } catch (err) {
+    console.error("[players] search failed:", err);
+    return NextResponse.json(
+      { error: "Could not search players. Try again." },
+      { status: 500 },
     );
-  } else {
-    verifiedUsers = await withRetry(() =>
-      adminRest<VerifiedUser[]>("users", {
-        query:
-          "?verification_status=eq.verified&is_active=eq.true&role=neq.admin&select=id&order=name.asc&limit=40",
-      }),
-    );
   }
-  for (const u of verifiedUsers) {
-    await ensureTournamentPlayerForUser(u.id);
-  }
-
-  const players = await searchVerifiedPlayersForPicker(tournament.id, {
-    excludeTeamId,
-    q,
-    limit: 40,
-  });
-
-  return NextResponse.json({
-    tournament: { id: tournament.id, name: tournament.name },
-    players,
-  });
 }
 
 export async function POST(request: Request) {

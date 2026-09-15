@@ -32,6 +32,18 @@ export const adminCreateTeamSchema = z.object({
   captain_id: z.string().uuid("Select a captain."),
 });
 
+/** Verified player requests to become a team owner. Team is created only after admin approval. */
+export const playerCreateTeamSchema = z.object({
+  name: z.string().trim().min(2).max(60),
+});
+
+export const ownerRequestDecisionSchema = z.object({
+  action: z.literal("owner_request"),
+  request_id: z.string().uuid(),
+  decision: z.enum(["approve", "reject"]),
+  rejection_reason: z.string().trim().max(200).optional(),
+});
+
 export const setTeamRosterSchema = z.object({
   members: z
     .array(
@@ -53,6 +65,17 @@ export const updateTeamSchema = z.object({
     .max(6)
     .transform((v) => v.toUpperCase())
     .optional(),
+});
+
+export const adminUpdateTeamSchema = updateTeamSchema.extend({
+  action: z.literal("update"),
+  team_id: z.string().uuid(),
+  captain_id: z.string().uuid().optional(),
+});
+
+export const adminDeleteTeamSchema = z.object({
+  action: z.literal("delete"),
+  team_id: z.string().uuid(),
 });
 
 export const teamDecisionSchema = z.object({

@@ -6,6 +6,7 @@ import { adminRest, adminRpc, RestError, withRetry } from "@/lib/supabase/rest";
 import {
   formatApprovalConflicts,
   getActiveTournament,
+  getManagerName,
   getTeamById,
   listPlayersByTeam,
   type PlayerConflict,
@@ -14,6 +15,7 @@ import {
   type TeamRow,
 } from "@/lib/teams/queries";
 import { formatUnverifiedPlayers } from "@/lib/verification/helpers";
+import { shortNameFromTeamName } from "@/lib/teams/labels";
 
 import type {
   adminCreateTeamSchema,
@@ -165,6 +167,226 @@ export async function createTeamByAdmin(
   }
 }
 
+export async function uniqueShortName(
+  tournamentId: string,
+  name: string,
+): Promise<string> {
+  const base = shortNameFromTeamName(name);
+  const existing = await withRetry(() =>
+    adminRest<Array<{ short_name: string }>>("teams", {
+      query: `?tournament_id=eq.${encodeURIComponent(tournamentId)}&select=short_name`,
+    }),
+  );
+  const taken = new Set(existing.map((row) => row.short_name.toUpperCase()));
+  if (!taken.has(base)) return base;
+  for (let i = 2; i <= 99; i++) {
+    const suffix = String(i);
+    const candidate = `${base.slice(0, Math.max(2, 6 - suffix.length))}${suffix}`.toUpperCase();
+    if (!taken.has(candidate) && candidate.length >= 2 && candidate.length <= 6) {
+      return candidate;
+    }
+  }
+  return `${base.slice(0, 4)}${String(Date.now()).slice(-2)}`.slice(0, 6);
+}
+
+export async function updateTeamByAdmin(
+  adminUser: SessionUser,
+  input: {
+    teamId: string;
+    name?: string;
+    short_name?: string;
+    captain_id?: string;
+  },
+): Promise<
+  { team: TeamRow; captain_name: string | null } | { error: string; status: number }
+> {
+  if (!canAccessAdmin(adminUser)) {
+    return { error: "Only admins can update teams.", status: 403 };
+  }
+
+  const team = await getTeamById(input.teamId);
+  if (!team) return { error: "Team not found.", status: 404 };
+
+  const body: Record<string, unknown> = {};
+  if (input.name && input.name !== team.name) body.name = input.name;
+  if (input.short_name && input.short_name !== team.short_name) {
+    body.short_name = input.short_name;
+  }
+
+  let nextCaptainId = team.manager_id;
+  if (input.captain_id && input.captain_id !== team.manager_id) {
+    const captainId = input.captain_id;
+    const captains = await withRetry(() =>
+      adminRest<
+        Array<{
+          id: string;
+          name: string;
+          role: string;
+          is_active: boolean;
+          verification_status: string;
+        }>
+      >("users", {
+        query: `?id=eq.${encodeURIComponent(captainId)}&select=id,name,role,is_active,verification_status&limit=1`,
+      }),
+    );
+    const captain = captains[0];
+    if (!captain || !captain.is_active) {
+      return { error: "Captain user not found or inactive.", status: 400 };
+    }
+    if (captain.verification_status !== "verified") {
+      return {
+        error: "Only verified users can be assigned as captain.",
+        status: 400,
+      };
+    }
+    const existing = await withRetry(() =>
+      adminRest<TeamRow[]>("teams", {
+        query: `?manager_id=eq.${encodeURIComponent(captain.id)}&tournament_id=eq.${encodeURIComponent(team.tournament_id)}&registration_status=in.(pending,approved)&id=neq.${encodeURIComponent(team.id)}&select=id,name`,
+      }),
+    );
+    if (existing.length > 0) {
+      return {
+        error: `${captain.name} is already captain of “${existing[0]!.name}”.`,
+        status: 409,
+      };
+    }
+    body.manager_id = captain.id;
+    nextCaptainId = captain.id;
+    if (captain.role === "viewer") {
+      await withRetry(() =>
+        adminRest("users", {
+          method: "PATCH",
+          query: `?id=eq.${encodeURIComponent(captain.id)}`,
+          prefer: "return=minimal",
+          body: { role: "team_manager" },
+        }),
+      );
+    }
+  }
+
+  if (Object.keys(body).length === 0) {
+    const captain_name = await getManagerName(team.manager_id);
+    return { team, captain_name };
+  }
+
+  try {
+    const updated = await withRetry(() =>
+      adminRest<TeamRow[]>("teams", {
+        method: "PATCH",
+        query: `?id=eq.${encodeURIComponent(team.id)}`,
+        prefer: "return=representation",
+        body,
+      }),
+    );
+    const next = updated[0];
+    if (!next) return { error: "Could not update team.", status: 500 };
+
+    await writeAuditLog({
+      actorId: adminUser.id,
+      action: "team.update",
+      entityType: "team",
+      entityId: team.id,
+      previousValue: {
+        name: team.name,
+        short_name: team.short_name,
+        captain_id: team.manager_id,
+      },
+      newValue: {
+        name: next.name,
+        short_name: next.short_name,
+        captain_id: next.manager_id,
+      },
+    });
+
+    const captain_name = await getManagerName(nextCaptainId);
+    return { team: next, captain_name };
+  } catch (err) {
+    if (err instanceof RestError && err.status === 409) {
+      return {
+        error: "A team with that name or short name already exists.",
+        status: 409,
+      };
+    }
+    console.error("[teams] admin update failed:", err);
+    return { error: "Could not update team.", status: 500 };
+  }
+}
+
+export async function deleteTeamByAdmin(
+  adminUser: SessionUser,
+  teamId: string,
+): Promise<{ ok: true } | { error: string; status: number }> {
+  if (!canAccessAdmin(adminUser)) {
+    return { error: "Only admins can delete teams.", status: 403 };
+  }
+
+  const team = await getTeamById(teamId);
+  if (!team) return { error: "Team not found.", status: 404 };
+
+  const matches = await withRetry(() =>
+    adminRest<Array<{ id: string }>>("matches", {
+      query: `?or=(team_a_id.eq.${encodeURIComponent(teamId)},team_b_id.eq.${encodeURIComponent(teamId)})&select=id&limit=1`,
+    }),
+  );
+  if (matches.length > 0) {
+    return {
+      error:
+        "This team has matches. Delete those matches first, then delete the team.",
+      status: 409,
+    };
+  }
+
+  try {
+    await withRetry(() =>
+      adminRest("players", {
+        method: "PATCH",
+        query: `?locked_team_id=eq.${encodeURIComponent(teamId)}`,
+        prefer: "return=minimal",
+        body: { locked_team_id: null },
+      }),
+    );
+  } catch {
+    // Column/table may already be empty.
+  }
+
+  try {
+    await withRetry(() =>
+      adminRest("teams", {
+        method: "DELETE",
+        query: `?id=eq.${encodeURIComponent(teamId)}`,
+        prefer: "return=minimal",
+      }),
+    );
+  } catch (err) {
+    if (
+      err instanceof RestError &&
+      (err.status === 409 || /foreign key|violates/i.test(err.message))
+    ) {
+      return {
+        error:
+          "This team cannot be deleted because it is still used in matches.",
+        status: 409,
+      };
+    }
+    console.error("[teams] admin delete failed:", err);
+    return { error: "Could not delete team.", status: 500 };
+  }
+
+  await writeAuditLog({
+    actorId: adminUser.id,
+    action: "team.delete",
+    entityType: "team",
+    entityId: teamId,
+    previousValue: {
+      name: team.name,
+      short_name: team.short_name,
+      captain_id: team.manager_id,
+    },
+  });
+
+  return { ok: true };
+}
+
 export async function approveTeam(
   adminUser: SessionUser,
   teamId: string,
@@ -212,6 +434,22 @@ export async function approveTeam(
       entityId: teamId,
       newValue: { approved: true, registration_status: "approved" },
     });
+
+    try {
+      await withRetry(() =>
+        adminRest("team_invites", {
+          method: "PATCH",
+          query: `?team_id=eq.${encodeURIComponent(teamId)}&status=eq.pending`,
+          prefer: "return=minimal",
+          body: {
+            status: "cancelled",
+            responded_at: new Date().toISOString(),
+          },
+        }),
+      );
+    } catch {
+      // Invites table may not exist yet.
+    }
 
     return { team };
   } catch (err) {

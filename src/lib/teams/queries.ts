@@ -59,6 +59,48 @@ export async function getActiveTournament(): Promise<ActiveTournament | null> {
   return rows[0] ?? null;
 }
 
+/** Active tournament, or the most recently created one if none is marked active. */
+export async function getPrimaryTournament(): Promise<ActiveTournament | null> {
+  const active = await getActiveTournament();
+  if (active) return active;
+  if (!isSupabaseAdminConfigured()) return null;
+  const rows = await withRetry(() =>
+    adminRest<ActiveTournament[]>("tournaments", {
+      query:
+        "?select=id,name,registration_open,status&order=created_at.desc&limit=1",
+    }),
+  );
+  return rows[0] ?? null;
+}
+
+async function attachUserAvatars<
+  T extends { user_id: string | null; photo_url: string | null },
+>(rows: T[]): Promise<Array<T & { avatar_url: string | null }>> {
+  const withAvatars = rows.map((row) => ({
+    ...row,
+    avatar_url: row.photo_url,
+  }));
+  const userIds = [
+    ...new Set(
+      rows.map((row) => row.user_id).filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  if (!userIds.length) return withAvatars;
+
+  const users = await withRetry(() =>
+    adminRest<Array<{ id: string; avatar_url: string | null }>>("users", {
+      query: `?id=in.(${userIds.join(",")})&select=id,avatar_url`,
+    }),
+  );
+  const avatarByUser = new Map(users.map((u) => [u.id, u.avatar_url]));
+  for (const row of withAvatars) {
+    if (row.user_id) {
+      row.avatar_url = avatarByUser.get(row.user_id) ?? row.photo_url ?? null;
+    }
+  }
+  return withAvatars;
+}
+
 export async function listApprovedTeams(): Promise<TeamRow[]> {
   if (!isSupabaseAdminConfigured()) return [];
   return withRetry(() =>
@@ -192,6 +234,7 @@ export async function listPlayersByTeam(
         ? lockedNames.get(player.locked_team_id) ?? null
         : null,
       pending_other_team_names: pendingByPlayer.get(player.id) ?? [],
+      avatar_url: player.photo_url,
     });
   }
 
@@ -202,18 +245,25 @@ export async function listPlayersByTeam(
     return a.name.localeCompare(b.name);
   });
 
-  return views;
+  return attachUserAvatars(views);
 }
 
 export async function listTournamentPlayers(
   tournamentId: string,
-): Promise<PlayerRow[]> {
+): Promise<Array<PlayerRow & { avatar_url: string | null }>> {
   if (!isSupabaseAdminConfigured()) return [];
-  return withRetry(() =>
+  const players = await withRetry(() =>
     adminRest<PlayerRow[]>("players", {
       query: `?tournament_id=eq.${encodeURIComponent(tournamentId)}&select=*&order=public_code.asc`,
     }),
   );
+  return attachUserAvatars(players);
+}
+
+function postgrestIlike(value: string): string | null {
+  const cleaned = value.replace(/[,()*]/g, " ").replace(/\s+/g, " ").trim();
+  if (!cleaned) return null;
+  return encodeURIComponent(`*${cleaned}*`);
 }
 
 /**
@@ -235,22 +285,22 @@ export async function searchVerifiedPlayersForPicker(
   if (!isSupabaseAdminConfigured()) return [];
   const limit = options?.limit ?? 40;
   const q = (options?.q ?? "").trim();
+  const like = q ? postgrestIlike(q) : null;
 
   type VerifiedUser = { id: string; name: string; mobile_number: string };
   let verifiedUsers: VerifiedUser[] = [];
 
-  if (q) {
-    const encoded = encodeURIComponent(`*${q}*`);
+  if (like) {
     verifiedUsers = await withRetry(() =>
       adminRest<VerifiedUser[]>("users", {
-        query: `?verification_status=eq.verified&is_active=eq.true&role=neq.admin&or=(name.ilike.${encoded},mobile_number.ilike.${encoded})&select=id,name,mobile_number&limit=${limit}`,
+        query: `?verification_status=eq.verified&is_active=eq.true&role=neq.admin&or=(name.ilike.${like},mobile_number.ilike.${like})&select=id,name,mobile_number&limit=${limit}`,
       }),
     );
 
     // Also match Player ID (public_code) then keep only verified linked users
     const byCode = await withRetry(() =>
       adminRest<PlayerRow[]>("players", {
-        query: `?tournament_id=eq.${encodeURIComponent(tournamentId)}&public_code=ilike.${encodeURIComponent(`*${q}*`)}&select=*&limit=${limit}`,
+        query: `?tournament_id=eq.${encodeURIComponent(tournamentId)}&public_code=ilike.${like}&select=*&limit=${limit}`,
       }),
     );
     const userIds = [
@@ -286,7 +336,7 @@ export async function searchVerifiedPlayersForPicker(
     }),
   );
 
-  // Missing player rows are provisioned by /api/players (server route), not here.
+  // Player rows are created when admin verifies the user.
   players = players.slice(0, limit);
   if (!players.length) return [];
 
@@ -299,6 +349,20 @@ export async function searchVerifiedPlayersForPicker(
       query: `?player_id=in.(${players.map((p) => p.id).join(",")})&select=team_id,player_id`,
     }),
   );
+  const invitedHere = new Set<string>();
+  const excludeTeamId = options?.excludeTeamId;
+  if (excludeTeamId) {
+    try {
+      const pendingHere = await withRetry(() =>
+        adminRest<Array<{ player_id: string }>>("team_invites", {
+          query: `?team_id=eq.${encodeURIComponent(excludeTeamId)}&status=eq.pending&select=player_id`,
+        }),
+      );
+      for (const row of pendingHere) invitedHere.add(row.player_id);
+    } catch {
+      // Table may not exist until the invite migration is applied.
+    }
+  }
   const teamIds = [...new Set(memberships.map((m) => m.team_id))];
   const teams = teamIds.length
     ? await withRetry(() =>
@@ -332,6 +396,13 @@ export async function searchVerifiedPlayersForPicker(
         locked_team_name,
         pending_other_team_names,
       };
+    } else if (invitedHere.has(p.id)) {
+      availability = {
+        status: "invited",
+        label: "Invite already sent — waiting for them to accept",
+        locked_team_name: null,
+        pending_other_team_names,
+      };
     } else if (pending_other_team_names.length) {
       availability = {
         status: "pending_elsewhere",
@@ -357,96 +428,105 @@ export async function searchVerifiedPlayersForPicker(
   });
 }
 
-function preferPublicPlayerRow<
-  T extends { team_id: string; team_status: TeamRegistrationStatus; locked_team_id: string | null },
->(candidate: T, current: T): T {
-  const candidateApproved = candidate.team_status === "approved";
-  const currentApproved = current.team_status === "approved";
-  if (candidateApproved !== currentApproved) {
-    return candidateApproved ? candidate : current;
-  }
-  if (candidate.locked_team_id) {
-    if (candidate.team_id === candidate.locked_team_id) return candidate;
-    if (current.team_id === current.locked_team_id) return current;
-  }
-  return current;
-}
-
-/** Players on pending + approved teams for the public players page. */
+/** All verified players in the tournament, including those not yet in a squad. */
 export async function listPublicPlayers(
   tournamentId?: string | null,
 ): Promise<
   Array<
-    TeamPlayerView & {
-      team_name: string;
-      team_short_name: string;
-      team_status: TeamRegistrationStatus;
+    PlayerRow & {
       avatar_url: string | null;
+      team_name?: string;
+      team_status?: TeamRegistrationStatus;
     }
   >
 > {
   if (!isSupabaseAdminConfigured() || !tournamentId) return [];
-  const teams = await listPublicTeams(tournamentId);
-  if (!teams.length) return [];
-  const teamMap = new Map(teams.map((t) => [t.id, t]));
 
-  type PublicPlayerRow = TeamPlayerView & {
-    team_name: string;
-    team_short_name: string;
-    team_status: TeamRegistrationStatus;
-    avatar_url: string | null;
-  };
-
-  const byPlayerId = new Map<string, PublicPlayerRow>();
-  for (const team of teams) {
-    const players = await listPlayersByTeam(team.id);
-    for (const p of players) {
-      const t = teamMap.get(team.id);
-      const row: PublicPlayerRow = {
-        ...p,
-        team_name: t?.name ?? "Team",
-        team_short_name: t?.short_name ?? "T",
-        team_status: t?.registration_status ?? "pending",
-        avatar_url: null,
-      };
-      const existing = byPlayerId.get(p.id);
-      if (!existing || preferPublicPlayerRow(row, existing) === row) {
-        byPlayerId.set(p.id, row);
-      }
-    }
-  }
-  const results = [...byPlayerId.values()];
+  const players = await withRetry(() =>
+    adminRest<PlayerRow[]>("players", {
+      query: `?tournament_id=eq.${encodeURIComponent(tournamentId)}&user_id=not.is.null&select=*&order=public_code.asc`,
+    }),
+  );
+  if (!players.length) return [];
 
   const userIds = [
     ...new Set(
-      results
-        .map((p) => p.user_id)
-        .filter((id): id is string => Boolean(id)),
+      players.map((p) => p.user_id).filter((id): id is string => Boolean(id)),
     ),
   ];
-  if (userIds.length) {
-    const users = await withRetry(() =>
-      adminRest<Array<{ id: string; avatar_url: string | null }>>("users", {
-        query: `?id=in.(${userIds.join(",")})&select=id,avatar_url`,
-      }),
-    );
-    const avatarByUser = new Map(users.map((u) => [u.id, u.avatar_url]));
-    for (const row of results) {
-      if (row.user_id) {
-        row.avatar_url =
-          avatarByUser.get(row.user_id) ?? row.photo_url ?? null;
-      } else {
-        row.avatar_url = row.photo_url;
-      }
-    }
-  } else {
-    for (const row of results) {
-      row.avatar_url = row.photo_url;
+  const verified = await withRetry(() =>
+    adminRest<Array<{ id: string }>>("users", {
+      query: `?id=in.(${userIds.join(",")})&verification_status=eq.verified&is_active=eq.true&role=neq.admin&select=id`,
+    }),
+  );
+  const verifiedIds = new Set(verified.map((u) => u.id));
+  const verifiedPlayers = players.filter(
+    (p) => p.user_id && verifiedIds.has(p.user_id),
+  );
+  if (!verifiedPlayers.length) return [];
+
+  const memberships = await withRetry(() =>
+    adminRest<Array<{ player_id: string; team_id: string }>>("team_players", {
+      query: `?player_id=in.(${verifiedPlayers.map((p) => p.id).join(",")})&select=player_id,team_id`,
+    }),
+  );
+  const teamIds = [...new Set(memberships.map((m) => m.team_id))];
+  const teams = teamIds.length
+    ? await withRetry(() =>
+        adminRest<
+          Array<{
+            id: string;
+            name: string;
+            registration_status: TeamRegistrationStatus;
+          }>
+        >("teams", {
+          query: `?id=in.(${teamIds.join(",")})&registration_status=in.(pending,approved)&select=id,name,registration_status`,
+        }),
+      )
+    : [];
+  const teamMap = new Map(teams.map((t) => [t.id, t]));
+  const teamByPlayer = new Map<
+    string,
+    { name: string; status: TeamRegistrationStatus }
+  >();
+  for (const membership of memberships) {
+    const team = teamMap.get(membership.team_id);
+    if (!team) continue;
+    const current = teamByPlayer.get(membership.player_id);
+    if (
+      !current ||
+      (team.registration_status === "approved" &&
+        current.status !== "approved")
+    ) {
+      teamByPlayer.set(membership.player_id, {
+        name: team.name,
+        status: team.registration_status,
+      });
     }
   }
 
-  results.sort((a, b) => a.name.localeCompare(b.name));
-  return results;
+  const rows = verifiedPlayers.map((player) => {
+    const team = teamByPlayer.get(player.id);
+    return {
+      ...player,
+      team_name: team?.name,
+      team_status: team?.status,
+      avatar_url: player.photo_url,
+    };
+  });
+  const withAvatars = await attachUserAvatars(rows);
+  withAvatars.sort((a, b) => {
+    const numA = Number(/^P(\d+)$/i.exec(a.public_code)?.[1] ?? NaN);
+    const numB = Number(/^P(\d+)$/i.exec(b.public_code)?.[1] ?? NaN);
+    if (Number.isFinite(numA) && Number.isFinite(numB) && numA !== numB) {
+      return numA - numB;
+    }
+    return a.public_code.localeCompare(b.public_code, undefined, {
+      numeric: true,
+      sensitivity: "base",
+    });
+  });
+  return withAvatars;
 }
 
 export async function getPlayerById(id: string): Promise<PlayerRow | null> {

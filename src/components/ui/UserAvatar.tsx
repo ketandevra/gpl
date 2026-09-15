@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 type UserAvatarProps = {
   name: string;
   src?: string | null;
-  size?: "sm" | "md" | "lg";
+  size?: "sm" | "md" | "card" | "lg";
   /** Circle (nav) or rounded square (profile preview so the full photo shows). */
   shape?: "circle" | "rounded";
   /** `contain` shows the full photo; `cover` fills the frame. */
@@ -20,6 +20,7 @@ type UserAvatarProps = {
 const SIZE_CLASS = {
   sm: "h-9 w-9 text-[11px]",
   md: "h-12 w-12 text-sm",
+  card: "h-16 w-16 text-sm",
   lg: "h-36 w-36 text-2xl sm:h-40 sm:w-40",
 } as const;
 

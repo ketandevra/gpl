@@ -1,14 +1,13 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
 import { ProfileClient } from "@/components/auth/ProfileClient";
-import {
-  getActiveTournament,
-  listTeamsForCaptain,
-} from "@/lib/teams/queries";
+import { listTeamsForCaptain } from "@/lib/teams/queries";
+import { listPendingInvitesForUser } from "@/lib/teams/invites";
 import { adminRest, withRetry } from "@/lib/supabase/rest";
 import { isSupabaseAdminConfigured } from "@/lib/supabase/env";
 import type { PlayerRole } from "@/lib/types/database";
 import type { TshirtSize } from "@/lib/verification/registration";
+import { ensureTournamentPlayerForUser } from "@/lib/verification/service";
 
 export const metadata = { title: "Profile" };
 export const dynamic = "force-dynamic";
@@ -33,7 +32,10 @@ export default async function ProfilePage() {
     );
   }
 
-  const captainTeams = await listTeamsForCaptain(user.id);
+  const [captainTeams, pendingInvites] = await Promise.all([
+    listTeamsForCaptain(user.id),
+    listPendingInvitesForUser(user.id),
+  ]);
 
   let playerId: string | null = null;
   let playingRole: PlayerRole | null = null;
@@ -53,15 +55,30 @@ export default async function ProfilePage() {
     playingRole = prefs[0]?.preferred_player_role ?? null;
     tshirtSize = prefs[0]?.tshirt_size ?? null;
 
-    const tournament = await getActiveTournament();
-    if (tournament) {
+    if (user.verification_status === "verified") {
+      try {
+        const ensured = await ensureTournamentPlayerForUser(user.id);
+        if (ensured?.public_code) {
+          playerId = ensured.public_code;
+          playingRole = ensured.role ?? playingRole;
+          tshirtSize = (ensured.tshirt_size as TshirtSize | null) ?? tshirtSize;
+        }
+      } catch (err) {
+        console.error("[profile] ensure player failed:", err);
+      }
+    }
+
+    if (!playerId) {
       const players = await withRetry(() =>
-        adminRest<Array<{ public_code: string; role: PlayerRole; tshirt_size: TshirtSize | null }>>(
-          "players",
-          {
-            query: `?tournament_id=eq.${encodeURIComponent(tournament.id)}&user_id=eq.${encodeURIComponent(user.id)}&select=public_code,role,tshirt_size&limit=1`,
-          },
-        ),
+        adminRest<
+          Array<{
+            public_code: string;
+            role: PlayerRole;
+            tshirt_size: TshirtSize | null;
+          }>
+        >("players", {
+          query: `?user_id=eq.${encodeURIComponent(user.id)}&select=public_code,role,tshirt_size&order=created_at.desc&limit=1`,
+        }),
       );
       const p = players[0];
       if (p) {
@@ -69,6 +86,10 @@ export default async function ProfilePage() {
         playingRole = p.role ?? playingRole;
         tshirtSize = p.tshirt_size ?? tshirtSize;
       }
+    }
+
+    if (!playerId && user.verification_status === "verified") {
+      playerId = `GPL-${user.id.replace(/-/g, "").slice(0, 8).toUpperCase()}`;
     }
   }
 
@@ -84,6 +105,7 @@ export default async function ProfilePage() {
         short_name: t.short_name,
         registration_status: t.registration_status,
       }))}
+      invites={pendingInvites}
     />
   );
 }

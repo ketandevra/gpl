@@ -22,6 +22,8 @@ TRUNCATE TABLE
   innings,
   match_scorers,
   matches,
+  team_invites,
+  team_owner_requests,
   team_players,
   players,
   teams,

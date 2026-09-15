@@ -15,6 +15,7 @@ type Props = {
   onAdd: (player: PickerPlayer) => void;
   disabled?: boolean;
   excludeTeamId?: string;
+  allowInvited?: boolean;
 };
 
 export function PlayerSearchPicker({
@@ -22,6 +23,7 @@ export function PlayerSearchPicker({
   onAdd,
   disabled,
   excludeTeamId,
+  allowInvited = false,
 }: Props) {
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
@@ -40,6 +42,8 @@ export function PlayerSearchPicker({
   }, []);
 
   useEffect(() => {
+    if (!open) return;
+    const controller = new AbortController();
     const handle = setTimeout(() => {
       void (async () => {
         setLoading(true);
@@ -50,27 +54,42 @@ export function PlayerSearchPicker({
           if (excludeTeamId) params.set("exclude_team_id", excludeTeamId);
           const res = await fetch(`/api/players?${params.toString()}`, {
             credentials: "same-origin",
+            signal: controller.signal,
           });
-          const data = (await res.json()) as {
-            players?: PickerPlayer[];
-            error?: string;
-          };
+          let data: { players?: PickerPlayer[]; error?: string } = {};
+          try {
+            data = (await res.json()) as typeof data;
+          } catch {
+            if (!controller.signal.aborted) {
+              setError("Search failed. Try again.");
+              setPlayers([]);
+            }
+            return;
+          }
           if (!res.ok) {
             setError(data.error ?? "Search failed");
             setPlayers([]);
             return;
           }
           setPlayers(data.players ?? []);
-        } catch {
-          setError("Network error");
+        } catch (err) {
+          if (controller.signal.aborted) return;
+          setError(
+            err instanceof Error && err.name === "AbortError"
+              ? null
+              : "Could not search players. Try again.",
+          );
           setPlayers([]);
         } finally {
-          setLoading(false);
+          if (!controller.signal.aborted) setLoading(false);
         }
       })();
     }, 250);
-    return () => clearTimeout(handle);
-  }, [query, excludeTeamId]);
+    return () => {
+      clearTimeout(handle);
+      controller.abort();
+    };
+  }, [open, query, excludeTeamId]);
 
   return (
     <div ref={rootRef} className="relative">
@@ -108,7 +127,8 @@ export function PlayerSearchPicker({
             players.map((player) => {
               const already = selected.has(player.id);
               const locked = player.availability.status === "locked";
-              const blocked = already || locked;
+              const invited = player.availability.status === "invited";
+              const blocked = already || locked || (invited && !allowInvited);
               return (
                 <li key={player.id}>
                   <button
@@ -126,8 +146,10 @@ export function PlayerSearchPicker({
                     </span>
                     <span className="text-xs text-[#3e2723]/55">
                       {already
-                        ? "Already added to this team"
-                        : player.availability.label}
+                        ? "Already on this squad"
+                        : invited
+                          ? "Invite already sent"
+                          : player.availability.label}
                     </span>
                   </button>
                 </li>

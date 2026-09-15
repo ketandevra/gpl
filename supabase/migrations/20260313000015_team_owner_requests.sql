@@ -1,4 +1,56 @@
--- Scoped Danger zone wipes (matches / teams / players / users / tournaments / verifications / all)
+-- Verified players request team ownership. A team row is created only when
+-- an admin approves the request.
+
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_type WHERE typname = 'team_owner_request_status'
+  ) THEN
+    CREATE TYPE team_owner_request_status AS ENUM (
+      'pending',
+      'approved',
+      'rejected'
+    );
+  END IF;
+END
+$$;
+
+CREATE TABLE IF NOT EXISTS team_owner_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tournament_id uuid NOT NULL REFERENCES tournaments (id) ON DELETE CASCADE,
+  requester_id uuid NOT NULL REFERENCES users (id) ON DELETE CASCADE,
+  name text NOT NULL,
+  status team_owner_request_status NOT NULL DEFAULT 'pending',
+  rejection_reason text,
+  team_id uuid REFERENCES teams (id) ON DELETE SET NULL,
+  reviewed_by uuid REFERENCES users (id) ON DELETE SET NULL,
+  reviewed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  CONSTRAINT team_owner_requests_name_len
+    CHECK (char_length(btrim(name)) BETWEEN 2 AND 60)
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS team_owner_requests_pending_requester
+  ON team_owner_requests (tournament_id, requester_id)
+  WHERE status = 'pending';
+
+CREATE UNIQUE INDEX IF NOT EXISTS team_owner_requests_pending_name
+  ON team_owner_requests (tournament_id, lower(btrim(name)))
+  WHERE status = 'pending';
+
+CREATE INDEX IF NOT EXISTS team_owner_requests_status_idx
+  ON team_owner_requests (status, created_at DESC);
+
+DROP TRIGGER IF EXISTS trg_team_owner_requests_updated_at ON team_owner_requests;
+CREATE TRIGGER trg_team_owner_requests_updated_at
+  BEFORE UPDATE ON team_owner_requests
+  FOR EACH ROW EXECUTE FUNCTION set_updated_at();
+
+ALTER TABLE public.team_owner_requests ENABLE ROW LEVEL SECURITY;
+
+COMMENT ON TABLE public.team_owner_requests IS
+  'Player requests to become a team owner. The team is created only after admin approval.';
 
 CREATE OR REPLACE FUNCTION public.clear_data_scope(
   p_scope text,
@@ -30,18 +82,15 @@ BEGIN
     RETURN jsonb_build_object('ok', false, 'error', 'Unknown scope');
   END IF;
 
-  -- Fixtures + scorecards
   IF v_scope IN ('matches', 'teams', 'tournaments', 'all') THEN
     TRUNCATE TABLE balls, innings, match_scorers, matches RESTART IDENTITY CASCADE;
   END IF;
 
-  -- Teams (matches already gone when required)
   IF v_scope IN ('teams', 'tournaments', 'all') THEN
     UPDATE players SET locked_team_id = NULL WHERE locked_team_id IS NOT NULL;
-    TRUNCATE TABLE team_players, teams RESTART IDENTITY CASCADE;
+    TRUNCATE TABLE team_owner_requests, team_invites, team_players, teams RESTART IDENTITY CASCADE;
   END IF;
 
-  -- Player registry
   IF v_scope IN ('players', 'tournaments', 'all') THEN
     UPDATE innings
     SET striker_id = NULL, non_striker_id = NULL, bowler_id = NULL
@@ -53,7 +102,7 @@ BEGIN
       bowler_id = NULL,
       dismissed_player_id = NULL
     WHERE id IS NOT NULL;
-    TRUNCATE TABLE team_players RESTART IDENTITY CASCADE;
+    TRUNCATE TABLE team_invites, team_players RESTART IDENTITY CASCADE;
     DELETE FROM players WHERE id IS NOT NULL;
   END IF;
 
@@ -85,6 +134,8 @@ BEGIN
   IF v_scope IN ('users', 'all') THEN
     UPDATE teams SET manager_id = NULL WHERE manager_id IS NOT NULL;
     UPDATE players SET user_id = NULL WHERE user_id IS NOT NULL;
+    UPDATE team_invites SET invited_by = NULL WHERE invited_by IS NOT NULL;
+    UPDATE team_owner_requests SET reviewed_by = NULL WHERE reviewed_by IS NOT NULL;
     DELETE FROM match_scorers
     WHERE user_id <> v_admin_id
       AND (p_keep_user_id IS NULL OR user_id <> p_keep_user_id);
@@ -142,19 +193,5 @@ $$;
 
 REVOKE ALL ON FUNCTION public.clear_data_scope(text, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.clear_data_scope(text, uuid) TO service_role;
-
-CREATE OR REPLACE FUNCTION public.clear_all_keep_admin()
-RETURNS jsonb
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $$
-BEGIN
-  RETURN public.clear_data_scope('all', NULL);
-END;
-$$;
-
-REVOKE ALL ON FUNCTION public.clear_all_keep_admin() FROM PUBLIC;
-GRANT EXECUTE ON FUNCTION public.clear_all_keep_admin() TO service_role;
 
 NOTIFY pgrst, 'reload schema';

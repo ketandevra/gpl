@@ -10,6 +10,7 @@ import { APP_NAME, APP_SHORT_NAME, NAV_ITEMS } from "@/lib/constants";
 type SiteHeaderProps = {
   hasLive?: boolean;
   user?: SessionUser | null;
+  inviteCount?: number;
 };
 
 function isNavActive(href: string, pathname: string) {
@@ -17,7 +18,11 @@ function isNavActive(href: string, pathname: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function SiteHeader({ hasLive = false, user = null }: SiteHeaderProps) {
+export function SiteHeader({
+  hasLive = false,
+  user = null,
+  inviteCount = 0,
+}: SiteHeaderProps) {
   const pathname = usePathname() ?? "/";
   const onAdmin = pathname.startsWith("/admin");
   const navItems = NAV_ITEMS.filter(
@@ -97,14 +102,21 @@ export function SiteHeader({ hasLive = false, user = null }: SiteHeaderProps) {
           {user ? (
             <Link
               href="/profile"
-              className="touch-target inline-flex max-w-[11rem] items-center gap-2 rounded-full bg-[#f5b830]/95 py-1 pl-1 pr-2.5 text-[#3e2723] transition hover:bg-[#ffcf5c] active:scale-[0.98] sm:max-w-[14rem] sm:pr-3"
+              className="touch-target relative inline-flex max-w-[11rem] items-center gap-2 rounded-full bg-[#f5b830]/95 py-1 pl-1 pr-2.5 text-[#3e2723] transition hover:bg-[#ffcf5c] active:scale-[0.98] sm:max-w-[14rem] sm:pr-3"
             >
-              <UserAvatar
-                name={user.name}
-                src={user.avatar_url}
-                size="sm"
-                className="ring-2 ring-white/80"
-              />
+              <span className="relative">
+                <UserAvatar
+                  name={user.name}
+                  src={user.avatar_url}
+                  size="sm"
+                  className="ring-2 ring-white/80"
+                />
+                {inviteCount > 0 ? (
+                  <span className="absolute -right-1 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-[#d81b60] px-1 text-[10px] font-bold text-white">
+                    {inviteCount > 9 ? "9+" : inviteCount}
+                  </span>
+                ) : null}
+              </span>
               <span className="min-w-0 leading-tight">
                 <span className="block truncate text-sm font-semibold">
                   {displayName}

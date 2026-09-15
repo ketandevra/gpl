@@ -1,6 +1,6 @@
 import { AdminPlayersClient } from "@/components/admin/AdminPlayersClient";
 import {
-  getActiveTournament,
+  getPrimaryTournament,
   getTeamById,
   listTournamentPlayers,
 } from "@/lib/teams/queries";
@@ -21,7 +21,7 @@ export default async function AdminPlayersPage() {
     );
   }
 
-  const tournament = await getActiveTournament();
+  const tournament = await getPrimaryTournament();
   if (!tournament) {
     return (
       <div className="px-4 py-8 lg:px-8">

@@ -10,79 +10,26 @@ import {
   isTshirtSize,
 } from "@/lib/verification/registration";
 import {
-  createAadhaarSignedUrl,
+  getOwnVerificationSummary,
+  getUserVerification,
+  listVerificationDocuments,
   type DocType,
-  uploadAadhaarDocument,
-} from "@/lib/verification/storage";
+  type UserVerificationRow,
+} from "@/lib/verification/queries";
 import {
+  aadhaarDigits,
   isValidAadhaarNumber,
   maskAadhaar,
 } from "@/lib/verification/helpers";
-import { getActiveTournament } from "@/lib/teams/queries";
+import { getActiveTournament, getPrimaryTournament } from "@/lib/teams/queries";
 import type { PlayerRow } from "@/lib/teams/queries";
 
-export type VerificationDocRow = {
-  id: string;
-  user_id: string;
-  doc_type: DocType;
-  storage_path: string;
-  mime_type: string;
-  file_size: number;
-  uploaded_at: string;
+export {
+  getOwnVerificationSummary,
+  getUserVerification,
+  listVerificationDocuments,
 };
-
-export type UserVerificationRow = {
-  id: string;
-  name: string;
-  mobile_number: string;
-  verification_status: VerificationStatus;
-  aadhaar_number: string | null;
-  verification_submitted_at: string | null;
-  verification_reviewed_at: string | null;
-  verification_reviewed_by: string | null;
-  verification_rejection_reason: string | null;
-  preferred_player_role: PlayerRole | null;
-  tshirt_size: TshirtSize | null;
-  created_at: string;
-};
-
-export async function getUserVerification(
-  userId: string,
-): Promise<UserVerificationRow | null> {
-  const rows = await withRetry(() =>
-    adminRest<UserVerificationRow[]>("users", {
-      query: `?id=eq.${encodeURIComponent(userId)}&select=id,name,mobile_number,verification_status,aadhaar_number,verification_submitted_at,verification_reviewed_at,verification_reviewed_by,verification_rejection_reason,preferred_player_role,tshirt_size,created_at`,
-    }),
-  );
-  return rows[0] ?? null;
-}
-
-export async function listVerificationDocuments(
-  userId: string,
-): Promise<VerificationDocRow[]> {
-  return withRetry(() =>
-    adminRest<VerificationDocRow[]>("verification_documents", {
-      query: `?user_id=eq.${encodeURIComponent(userId)}&select=*&order=doc_type.asc`,
-    }),
-  );
-}
-
-/** Safe payload for the owning user (no Aadhaar number, no storage paths). */
-export async function getOwnVerificationSummary(userId: string) {
-  const user = await getUserVerification(userId);
-  if (!user) return null;
-  const docs = await listVerificationDocuments(userId);
-  return {
-    status: user.verification_status,
-    rejection_reason: user.verification_rejection_reason,
-    submitted_at: user.verification_submitted_at,
-    reviewed_at: user.verification_reviewed_at,
-    preferred_player_role: user.preferred_player_role,
-    tshirt_size: user.tshirt_size,
-    has_front: docs.some((d) => d.doc_type === "aadhaar_front"),
-    has_back: docs.some((d) => d.doc_type === "aadhaar_back"),
-  };
-}
+export type { DocType, UserVerificationRow, VerificationDocRow } from "@/lib/verification/queries";
 
 export async function uploadOwnDocument(
   user: SessionUser,
@@ -96,13 +43,8 @@ export async function uploadOwnDocument(
       status: 400,
     };
   }
-  if (user.verification_status === "pending") {
-    return {
-      error: "Your registration is already submitted. Wait for admin review.",
-      status: 400,
-    };
-  }
 
+  const { uploadAadhaarDocument } = await import("@/lib/verification/storage");
   const uploaded = await uploadAadhaarDocument({
     userId: user.id,
     docType,
@@ -156,6 +98,7 @@ export async function submitVerification(
   prefs: {
     preferred_player_role: PlayerRole;
     tshirt_size: TshirtSize;
+    aadhaar_number: string;
   },
 ): Promise<{ ok: true } | { error: string; status: number }> {
   if (user.verification_status === "verified") {
@@ -174,31 +117,46 @@ export async function submitVerification(
   if (!isTshirtSize(prefs.tshirt_size)) {
     return { error: "Select a t-shirt size.", status: 400 };
   }
+  const aadhaar = aadhaarDigits(prefs.aadhaar_number);
+  if (!isValidAadhaarNumber(aadhaar)) {
+    return { error: "Aadhaar number must be 12 digits.", status: 400 };
+  }
 
   const docs = await listVerificationDocuments(user.id);
   const hasFront = docs.some((d) => d.doc_type === "aadhaar_front");
   const hasBack = docs.some((d) => d.doc_type === "aadhaar_back");
   if (!hasFront || !hasBack) {
     return {
-      error: "Upload both Aadhaar front and back before submitting.",
+      error: "Upload both Aadhaar front and back photos before submitting.",
       status: 400,
     };
   }
 
-  await withRetry(() =>
-    adminRest("users", {
-      method: "PATCH",
-      query: `?id=eq.${encodeURIComponent(user.id)}`,
-      prefer: "return=minimal",
-      body: {
-        verification_status: "pending" satisfies VerificationStatus,
-        verification_submitted_at: new Date().toISOString(),
-        verification_rejection_reason: null,
-        preferred_player_role: prefs.preferred_player_role,
-        tshirt_size: prefs.tshirt_size,
-      },
-    }),
-  );
+  try {
+    await withRetry(() =>
+      adminRest("users", {
+        method: "PATCH",
+        query: `?id=eq.${encodeURIComponent(user.id)}`,
+        prefer: "return=minimal",
+        body: {
+          verification_status: "pending" satisfies VerificationStatus,
+          verification_submitted_at: new Date().toISOString(),
+          verification_rejection_reason: null,
+          preferred_player_role: prefs.preferred_player_role,
+          tshirt_size: prefs.tshirt_size,
+          aadhaar_number: aadhaar,
+        },
+      }),
+    );
+  } catch (err) {
+    if (err instanceof RestError && (err.status === 409 || /unique|duplicate/i.test(err.message))) {
+      return {
+        error: "This Aadhaar number is already registered to another user.",
+        status: 409,
+      };
+    }
+    throw err;
+  }
 
   await writeAuditLog({
     actorId: user.id,
@@ -216,7 +174,13 @@ export async function submitVerification(
 }
 
 export async function listPendingVerifications(): Promise<
-  Array<UserVerificationRow & { has_front: boolean; has_back: boolean }>
+  Array<
+    UserVerificationRow & {
+      has_aadhaar: boolean;
+      has_front: boolean;
+      has_back: boolean;
+    }
+  >
 > {
   const users = await withRetry(() =>
     adminRest<UserVerificationRow[]>("users", {
@@ -225,26 +189,56 @@ export async function listPendingVerifications(): Promise<
     }),
   );
 
-  const enriched = [];
-  for (const u of users) {
-    const docs = await listVerificationDocuments(u.id);
-    enriched.push({
-      ...u,
-      aadhaar_number: null, // strip from list payload; detail endpoint masks
-      has_front: docs.some((d) => d.doc_type === "aadhaar_front"),
-      has_back: docs.some((d) => d.doc_type === "aadhaar_back"),
-    });
+  const docs = users.length
+    ? await withRetry(() =>
+        adminRest<Array<{ user_id: string; doc_type: string }>>(
+          "verification_documents",
+          {
+            query: `?user_id=in.(${users.map((u) => u.id).join(",")})&select=user_id,doc_type`,
+          },
+        ),
+      )
+    : [];
+  const docsByUser = new Map<string, Set<string>>();
+  for (const doc of docs) {
+    const set = docsByUser.get(doc.user_id) ?? new Set<string>();
+    set.add(doc.doc_type);
+    docsByUser.set(doc.user_id, set);
   }
-  return enriched;
+
+  return users.map((u) => {
+    const types = docsByUser.get(u.id);
+    return {
+      ...u,
+      has_aadhaar: Boolean(u.aadhaar_number),
+      has_front: Boolean(types?.has("aadhaar_front")),
+      has_back: Boolean(types?.has("aadhaar_back")),
+      aadhaar_number: null,
+    };
+  });
 }
 
 export async function getAdminVerificationDetail(userId: string) {
   const user = await getUserVerification(userId);
   if (!user) return null;
-  const docs = await listVerificationDocuments(userId);
+
+  if (user.verification_status === "verified") {
+    const { purgeAadhaarDocumentsForUser } = await import(
+      "@/lib/verification/storage"
+    );
+    await purgeAadhaarDocumentsForUser(userId);
+  }
+
+  const docs =
+    user.verification_status === "verified"
+      ? []
+      : await listVerificationDocuments(userId);
+  const { createAadhaarSignedUrl } = await import(
+    "@/lib/verification/signed-url"
+  );
   const signed: Record<string, string | null> = {};
   for (const d of docs) {
-    signed[d.doc_type] = await createAadhaarSignedUrl(d.storage_path, 180);
+    signed[d.doc_type] = await createAadhaarSignedUrl(d.storage_path, 1800);
   }
 
   let player: PlayerRow | null = null;
@@ -307,6 +301,7 @@ export async function getAdminVerificationDetail(userId: string) {
       signed_url: signed[d.doc_type] ?? null,
       // Never return storage_path to the client
     })),
+    documents_purged: user.verification_status === "verified",
     history: history.map((h) => ({
       id: h.id,
       action: h.action,
@@ -337,6 +332,19 @@ export async function adminDecideVerification(params: {
 
   const target = await getUserVerification(params.userId);
   if (!target) return { error: "User not found.", status: 404 };
+
+  if (params.decision === "verify" && target.verification_status === "verified") {
+    return { error: "This player is already verified.", status: 400 };
+  }
+  if (params.decision === "reject" && target.verification_status === "verified") {
+    return {
+      error: "Revoke verification first if you need to reject this player.",
+      status: 400,
+    };
+  }
+  if (params.decision === "revoke" && target.verification_status !== "verified") {
+    return { error: "This player is not verified.", status: 400 };
+  }
 
   if (params.decision === "reject") {
     const reason = (params.rejection_reason ?? "").trim();
@@ -418,17 +426,9 @@ export async function adminDecideVerification(params: {
 
   // verify
   const aadhaar =
-    params.aadhaar_number?.replace(/\s/g, "") || target.aadhaar_number;
+    aadhaarDigits(params.aadhaar_number ?? "") || target.aadhaar_number;
   if (!aadhaar || !isValidAadhaarNumber(aadhaar)) {
     return { error: "Aadhaar number must be 12 digits.", status: 400 };
-  }
-
-  const docs = await listVerificationDocuments(params.userId);
-  if (
-    !docs.some((d) => d.doc_type === "aadhaar_front") ||
-    !docs.some((d) => d.doc_type === "aadhaar_back")
-  ) {
-    return { error: "Both Aadhaar images are required before verifying.", status: 400 };
   }
 
   try {
@@ -476,6 +476,19 @@ export async function adminDecideVerification(params: {
     newValue: { status: "verified" },
   });
 
+  // UIDAI: do not retain copies of Aadhaar after identity is established.
+  const { purgeAadhaarDocumentsForUser } = await import(
+    "@/lib/verification/storage"
+  );
+  await purgeAadhaarDocumentsForUser(params.userId);
+  await writeAuditLog({
+    actorId: params.admin.id,
+    action: "verification.documents_purged",
+    entityType: "user",
+    entityId: params.userId,
+    newValue: { status: "verified" },
+  });
+
   // Ensure tournament player exists for verified user
   await ensureTournamentPlayerForUser(params.userId);
 
@@ -490,7 +503,7 @@ export async function adminSaveAadhaar(params: {
   if (!canAccessAdmin(params.admin)) {
     return { error: "Forbidden.", status: 403 };
   }
-  const digits = params.aadhaar_number.replace(/\s/g, "");
+  const digits = aadhaarDigits(params.aadhaar_number);
   if (!isValidAadhaarNumber(digits)) {
     return { error: "Aadhaar number must be 12 digits.", status: 400 };
   }
@@ -530,10 +543,111 @@ export async function adminSaveAadhaar(params: {
   return { ok: true, masked: maskAadhaar(digits)! };
 }
 
+export async function adminSaveUserDetails(params: {
+  admin: SessionUser;
+  userId: string;
+  name: string;
+  preferred_player_role: PlayerRole;
+  tshirt_size: TshirtSize;
+  aadhaar_number?: string | null;
+}): Promise<{ ok: true; masked: string | null } | { error: string; status: number }> {
+  if (!canAccessAdmin(params.admin)) {
+    return { error: "Forbidden.", status: 403 };
+  }
+
+  const name = params.name.trim();
+  if (name.length < 2) {
+    return { error: "Name must be at least 2 characters.", status: 400 };
+  }
+  if (!isRegistrationPlayerRole(params.preferred_player_role)) {
+    return { error: "Select a playing role.", status: 400 };
+  }
+  if (!isTshirtSize(params.tshirt_size)) {
+    return { error: "Select a t-shirt size.", status: 400 };
+  }
+
+  const previous = await getUserVerification(params.userId);
+  if (!previous) return { error: "User not found.", status: 404 };
+
+  const body: Record<string, unknown> = {
+    name,
+    preferred_player_role: params.preferred_player_role,
+    tshirt_size: params.tshirt_size,
+  };
+
+  const aadhaar = params.aadhaar_number
+    ? aadhaarDigits(params.aadhaar_number)
+    : "";
+  if (aadhaar) {
+    if (!isValidAadhaarNumber(aadhaar)) {
+      return { error: "Aadhaar number must be 12 digits.", status: 400 };
+    }
+    body.aadhaar_number = aadhaar;
+  }
+
+  try {
+    await withRetry(() =>
+      adminRest("users", {
+        method: "PATCH",
+        query: `?id=eq.${encodeURIComponent(params.userId)}`,
+        prefer: "return=minimal",
+        body,
+      }),
+    );
+  } catch (err) {
+    if (err instanceof RestError && (err.status === 409 || /unique|duplicate/i.test(err.message))) {
+      return {
+        error: "This Aadhaar number is already registered to another user.",
+        status: 409,
+      };
+    }
+    return { error: "Could not save user details.", status: 500 };
+  }
+
+  try {
+    await withRetry(() =>
+      adminRest("players", {
+        method: "PATCH",
+        query: `?user_id=eq.${encodeURIComponent(params.userId)}`,
+        prefer: "return=minimal",
+        body: {
+          name,
+          role: params.preferred_player_role,
+          tshirt_size: params.tshirt_size,
+        },
+      }),
+    );
+  } catch {
+    // Player row may not exist yet.
+  }
+
+  await writeAuditLog({
+    actorId: params.admin.id,
+    action: "verification.details_updated",
+    entityType: "user",
+    entityId: params.userId,
+    previousValue: {
+      name: previous.name,
+      preferred_player_role: previous.preferred_player_role,
+      tshirt_size: previous.tshirt_size,
+    },
+    newValue: {
+      name,
+      preferred_player_role: params.preferred_player_role,
+      tshirt_size: params.tshirt_size,
+    },
+  });
+
+  return {
+    ok: true,
+    masked: aadhaar ? maskAadhaar(aadhaar) : maskAadhaar(previous.aadhaar_number),
+  };
+}
+
 export async function ensureTournamentPlayerForUser(
   userId: string,
 ): Promise<PlayerRow | null> {
-  const tournament = await getActiveTournament();
+  const tournament = await getPrimaryTournament();
   if (!tournament) return null;
 
   const existing = await withRetry(() =>

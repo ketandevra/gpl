@@ -10,12 +10,26 @@ type PlayerCardProps = {
   };
   href?: string;
   statusLine?: string;
+  statusTone?: "warning" | "available" | "default";
+  hideTeamName?: boolean;
 };
 
-export function PlayerCard({ player, href, statusLine }: PlayerCardProps) {
+export function PlayerCard({
+  player,
+  href,
+  statusLine,
+  statusTone = "warning",
+  hideTeamName = false,
+}: PlayerCardProps) {
   const jersey =
     "jersey_number" in player ? (player.jersey_number as number | null) : null;
   const avatarSrc = player.avatar_url ?? player.photo_url ?? null;
+  const statusClass =
+    statusTone === "available"
+      ? "mt-1 text-xs font-semibold text-[#15803d]"
+      : statusTone === "default"
+        ? "mt-1 text-xs font-medium text-[#3e2723]"
+        : "mt-1 text-xs text-[#8a6500]";
 
   const content = (
     <div className="rounded-2xl border border-[#3e2723]/10 bg-white p-4 shadow-sm transition active:scale-[0.99] sm:hover:border-[#2aa7ad]/35">
@@ -23,7 +37,7 @@ export function PlayerCard({ player, href, statusLine }: PlayerCardProps) {
         <UserAvatar
           name={player.name}
           src={avatarSrc}
-          size="md"
+          size="card"
           className="border border-[#3e2723]/10"
         />
         <div className="min-w-0">
@@ -33,10 +47,10 @@ export function PlayerCard({ player, href, statusLine }: PlayerCardProps) {
           <p className="text-xs text-[#3e2723]/55">
             {playerRoleLabel(player.role)}
             {jersey != null ? ` · #${jersey}` : ""}
-            {player.team_name ? ` · ${player.team_name}` : ""}
+            {!hideTeamName && player.team_name ? ` · ${player.team_name}` : ""}
           </p>
           {statusLine ? (
-            <p className="mt-1 text-xs text-[#8a6500]">{statusLine}</p>
+            <p className={statusClass}>{statusLine}</p>
           ) : null}
         </div>
       </div>

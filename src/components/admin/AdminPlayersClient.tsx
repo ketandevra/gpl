@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { PlayerCard } from "@/components/teams/PlayerCard";
 import type { PlayerRow } from "@/lib/teams/types";
 import { formatPlayerLabel } from "@/lib/teams/labels";
@@ -14,11 +14,29 @@ type Props = {
 export function AdminPlayersClient({ players: initial }: Props) {
   const router = useRouter();
   const [players, setPlayers] = useState(initial);
+  const [query, setQuery] = useState("");
   const [name, setName] = useState("");
   const [mobile, setMobile] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return players;
+    const qDigits = q.replace(/\D/g, "");
+    return players.filter((p) => {
+      const nameMatch = p.name.toLowerCase().includes(q);
+      const idMatch = p.public_code.toLowerCase().includes(q);
+      const mobileMatch = Boolean(
+        p.mobile_number &&
+          (p.mobile_number.toLowerCase().includes(q) ||
+            (qDigits.length > 0 &&
+              p.mobile_number.replace(/\D/g, "").includes(qDigits))),
+      );
+      return nameMatch || idMatch || mobileMatch;
+    });
+  }, [players, query]);
 
   async function onCreate(e: React.FormEvent) {
     e.preventDefault();
@@ -102,12 +120,22 @@ export function AdminPlayersClient({ players: initial }: Props) {
         {error ? <p className="text-sm text-[#9f1239]">{error}</p> : null}
       </form>
 
-      <p className="mt-6 text-sm text-[#3e2723]/60">
-        {players.length} players in the active tournament
+      <input
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        placeholder="Search name, player ID, or mobile"
+        className="mt-6 w-full rounded-xl border border-[#3e2723]/15 bg-white px-3 py-3 text-sm outline-none ring-[#2aa7ad] focus:ring-2"
+        aria-label="Search players"
+      />
+
+      <p className="mt-4 text-sm text-[#3e2723]/60">
+        {query.trim()
+          ? `${filtered.length} of ${players.length} players`
+          : `${players.length} players in the active tournament`}
       </p>
 
       <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        {players.map((player) => (
+        {filtered.map((player) => (
           <PlayerCard
             key={player.id}
             player={player}
@@ -123,8 +151,10 @@ export function AdminPlayersClient({ players: initial }: Props) {
         ))}
       </div>
 
-      {players.length === 0 ? (
-        <p className="mt-6 text-sm text-[#3e2723]/60">No players yet.</p>
+      {filtered.length === 0 ? (
+        <p className="mt-6 text-sm text-[#3e2723]/60">
+          {query.trim() ? "No players match that search." : "No players yet."}
+        </p>
       ) : null}
 
       <Link

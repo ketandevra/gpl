@@ -7,8 +7,9 @@ import {
 import { writeAuditLog } from "@/lib/auth/audit";
 import { canAccessAdmin } from "@/lib/auth/permissions";
 import { getCurrentUser } from "@/lib/auth/session";
+import { clearDataScope, SEED_ADMIN_ID } from "@/lib/admin/clear-data";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { adminRpc } from "@/lib/supabase/rest";
+import { RestError } from "@/lib/supabase/rest";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 
 const SCOPES = DANGER_SCOPES.map((s) => s.id) as [DangerScopeId, ...DangerScopeId[]];
@@ -17,8 +18,6 @@ const bodySchema = z.object({
   scope: z.enum(SCOPES).default("all"),
   confirmation: z.string().trim(),
 });
-
-const SEED_ADMIN_ID = "11111111-1111-1111-1111-111111111101";
 
 async function emptyStorageBucket(bucket: string, keepPrefixes: string[] = []) {
   const keep = new Set(keepPrefixes.filter(Boolean));
@@ -82,33 +81,18 @@ export async function POST(request: Request) {
   }
 
   try {
-    const result = await adminRpc<{ ok?: boolean; error?: string; scope?: string }>(
-      "clear_data_scope",
-      {
-        p_scope: scope,
-        // Full wipe matches the old reset: only seed GPL Admin remains.
-        p_keep_user_id: scope === "all" ? null : user.id,
-      },
-    );
-    if (!result || result.ok !== true) {
-      return NextResponse.json(
-        {
-          error:
-            result?.error ??
-            "Reset failed. Run migration 20260313000012_clear_data_scope.sql in Supabase first.",
-        },
-        { status: 500 },
-      );
-    }
+    await clearDataScope(scope, scope === "all" ? null : user.id);
   } catch (err) {
-    console.error("[reset] RPC failed:", err);
-    return NextResponse.json(
-      {
-        error:
-          "Reset failed. Apply migration 00012 (clear_data_scope) in the Supabase SQL Editor.",
-      },
-      { status: 500 },
-    );
+    console.error("[reset] clear failed:", err);
+    const detail =
+      err instanceof RestError && err.status === 504
+        ? "Delete timed out. Close any live scoring session and try again."
+        : err instanceof RestError
+          ? err.message
+          : err instanceof Error
+            ? err.message
+            : "Reset failed.";
+    return NextResponse.json({ error: detail }, { status: 500 });
   }
 
   const keepUserFolders = [user.id, SEED_ADMIN_ID];

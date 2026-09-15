@@ -1,5 +1,6 @@
 import type {
   PlayerRole,
+  TeamOwnerRequestStatus,
   TeamRegistrationStatus,
 } from "@/lib/types/database";
 
@@ -42,13 +43,46 @@ export type TeamPlayerView = PlayerRow & {
   locked_team_name: string | null;
   /** Other pending teams that also selected this player */
   pending_other_team_names: string[];
+  avatar_url: string | null;
 };
 
 export type PlayerAvailability = {
-  status: "available" | "locked" | "pending_elsewhere";
+  status: "available" | "locked" | "pending_elsewhere" | "invited";
   label: string;
   locked_team_name: string | null;
   pending_other_team_names: string[];
+};
+
+export type TeamOwnerRequestRow = {
+  id: string;
+  tournament_id: string;
+  requester_id: string;
+  name: string;
+  status: TeamOwnerRequestStatus;
+  rejection_reason: string | null;
+  team_id: string | null;
+  reviewed_by: string | null;
+  reviewed_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TeamOwnerRequestView = TeamOwnerRequestRow & {
+  requester_name: string;
+  requester_mobile: string;
+};
+
+export type TeamInviteView = {
+  id: string;
+  team_id: string;
+  team_name: string;
+  team_short_name: string;
+  player_id: string;
+  player_name: string;
+  player_code: string;
+  status: "pending" | "accepted" | "declined" | "cancelled";
+  created_at: string;
+  invited_by_name: string | null;
 };
 
 export type ActiveTournament = {

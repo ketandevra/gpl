@@ -1,5 +1,11 @@
 import "server-only";
-import sharp from "sharp";
+
+function canUseSharp() {
+  return (
+    typeof (globalThis as { WebSocketPair?: unknown }).WebSocketPair ===
+    "undefined"
+  );
+}
 
 export const IMAGE_INPUT_MAX_BYTES = 5 * 1024 * 1024;
 export const IMAGE_INPUT_MIME = new Set([
@@ -39,7 +45,15 @@ export async function optimizeImageBuffer(
 
   const { maxEdge, quality, maxOutputBytes } = PRESETS[preset];
 
+  if (!canUseSharp()) {
+    if (bytes.byteLength > IMAGE_INPUT_MAX_BYTES) {
+      return { error: "Image must be 5 MB or smaller." };
+    }
+    return { buffer: bytes, mimeType: "image/jpeg", size: bytes.byteLength };
+  }
+
   try {
+    const { default: sharp } = await import("sharp");
     let q = quality;
     let out = await sharp(bytes, { failOn: "none" })
       .rotate()

@@ -20,6 +20,12 @@ type AdminUser = {
   verification_status: VerificationStatus;
 };
 
+type UsersTab = "verified" | "unverified";
+
+function isVerified(user: AdminUser) {
+  return user.verification_status === "verified";
+}
+
 export function AdminUsersClient({
   users: initialUsers,
   currentUserId,
@@ -29,21 +35,28 @@ export function AdminUsersClient({
 }) {
   const router = useRouter();
   const [users, setUsers] = useState(initialUsers);
+  const [tab, setTab] = useState<UsersTab>("unverified");
   const [query, setQuery] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
+  const verifiedCount = users.filter(isVerified).length;
+  const unverifiedCount = users.length - verifiedCount;
+
   const filtered = useMemo(() => {
+    const inTab = users.filter((u) =>
+      tab === "verified" ? isVerified(u) : !isVerified(u),
+    );
     const q = query.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter(
+    if (!q) return inTab;
+    return inTab.filter(
       (u) =>
         u.name.toLowerCase().includes(q) ||
         u.mobile_number.includes(q) ||
         u.role.includes(q),
     );
-  }, [users, query]);
+  }, [users, query, tab]);
 
   async function patchUser(
     userId: string,
@@ -127,11 +140,59 @@ export function AdminUsersClient({
         Manage roles, disable accounts, and reset PINs.
       </p>
 
+      <div
+        role="tablist"
+        aria-label="Verification status"
+        className="mt-5 grid grid-cols-2 gap-1 rounded-2xl border border-[#3e2723]/10 bg-[#fdf6e8] p-1"
+      >
+        {(
+          [
+            {
+              id: "unverified" as const,
+              label: "Unverified",
+              count: unverifiedCount,
+            },
+            {
+              id: "verified" as const,
+              label: "Verified",
+              count: verifiedCount,
+            },
+          ] as const
+        ).map((item) => {
+          const active = tab === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setTab(item.id)}
+              className={`rounded-xl px-3 py-2.5 text-sm font-semibold transition ${
+                active
+                  ? "bg-white text-[#1a7f84] shadow-sm"
+                  : "text-[#3e2723]/60 hover:text-[#3e2723]"
+              }`}
+            >
+              {item.label}
+              <span
+                className={`ml-2 rounded-full px-1.5 py-0.5 text-xs font-bold ${
+                  active
+                    ? "bg-[#2aa7ad]/15 text-[#1a7f84]"
+                    : "bg-[#3e2723]/8 text-[#3e2723]/55"
+                }`}
+              >
+                {item.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="Search name, mobile, role"
-        className="mt-5 w-full rounded-xl border border-[#3e2723]/15 bg-white px-3 py-3 text-sm outline-none ring-[#2aa7ad] focus:ring-2"
+        placeholder={`Search ${tab} users`}
+        className="mt-4 w-full rounded-xl border border-[#3e2723]/15 bg-white px-3 py-3 text-sm outline-none ring-[#2aa7ad] focus:ring-2"
       />
 
       {message ? (
@@ -156,7 +217,7 @@ export function AdminUsersClient({
                 <p className="font-semibold text-[#3e2723]">{user.name}</p>
                 <p className="text-sm text-[#3e2723]/60">{user.mobile_number}</p>
                 <p className="mt-1 text-xs font-medium text-[#3e2723]/55">
-                  Verification: {verificationStatusLabel(user.verification_status)}
+                  {verificationStatusLabel(user.verification_status)}
                 </p>
               </div>
               <span
@@ -175,7 +236,7 @@ export function AdminUsersClient({
                 href={`/admin/verifications?user_id=${encodeURIComponent(user.id)}`}
                 className="rounded-full border border-[#2aa7ad]/40 px-3 py-1.5 text-center text-sm font-semibold text-[#1a7f84]"
               >
-                Verification profile
+                Review verification
               </Link>
               <label className="flex items-center gap-2 text-sm text-[#3e2723]">
                 Role
@@ -229,7 +290,13 @@ export function AdminUsersClient({
       </ul>
 
       {filtered.length === 0 ? (
-        <p className="mt-6 text-sm text-[#3e2723]/60">No users found.</p>
+        <p className="mt-6 text-sm text-[#3e2723]/60">
+          {query.trim()
+            ? "No users match that search."
+            : tab === "verified"
+              ? "No verified users yet."
+              : "No unverified users."}
+        </p>
       ) : null}
     </div>
   );

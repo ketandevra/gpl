@@ -1,19 +1,23 @@
 import { NextResponse } from "next/server";
 import { getCurrentUser } from "@/lib/auth/session";
-import {
-  getOwnVerificationSummary,
-  submitVerification,
-  uploadOwnDocument,
-} from "@/lib/verification/service";
-import type { DocType } from "@/lib/verification/storage";
+import { getOwnVerificationSummary } from "@/lib/verification/queries";
+import type { DocType } from "@/lib/verification/queries";
 
 export async function GET() {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Please sign in." }, { status: 401 });
   }
-  const summary = await getOwnVerificationSummary(user.id);
-  return NextResponse.json({ verification: summary });
+  try {
+    const summary = await getOwnVerificationSummary(user.id);
+    return NextResponse.json({ verification: summary });
+  } catch (err) {
+    console.error("[verification] summary failed:", err);
+    return NextResponse.json(
+      { error: "Could not load verification status." },
+      { status: 500 },
+    );
+  }
 }
 
 export async function POST(request: Request) {
@@ -24,7 +28,6 @@ export async function POST(request: Request) {
 
   const contentType = request.headers.get("content-type") ?? "";
 
-  // JSON submit
   if (contentType.includes("application/json")) {
     let body: unknown;
     try {
@@ -33,31 +36,34 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid body." }, { status: 400 });
     }
     if (
-      typeof body === "object" &&
-      body &&
-      "action" in body &&
-      (body as { action: string }).action === "submit"
+      typeof body !== "object" ||
+      !body ||
+      !("action" in body) ||
+      (body as { action: string }).action !== "submit"
     ) {
-      const raw = body as {
-        preferred_player_role?: string;
-        tshirt_size?: string;
-      };
-      const result = await submitVerification(user, {
-        preferred_player_role: (raw.preferred_player_role ?? "") as never,
-        tshirt_size: (raw.tshirt_size ?? "") as never,
-      });
-      if ("error" in result) {
-        return NextResponse.json(
-          { error: result.error },
-          { status: result.status },
-        );
-      }
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ error: "Unknown action." }, { status: 400 });
     }
-    return NextResponse.json({ error: "Unknown action." }, { status: 400 });
+
+    const raw = body as {
+      preferred_player_role?: string;
+      tshirt_size?: string;
+      aadhaar_number?: string;
+    };
+    const { submitVerification } = await import("@/lib/verification/service");
+    const result = await submitVerification(user, {
+      preferred_player_role: (raw.preferred_player_role ?? "") as never,
+      tshirt_size: (raw.tshirt_size ?? "") as never,
+      aadhaar_number: raw.aadhaar_number ?? "",
+    });
+    if ("error" in result) {
+      return NextResponse.json(
+        { error: result.error },
+        { status: result.status },
+      );
+    }
+    return NextResponse.json({ ok: true });
   }
 
-  // Multipart upload
   const declared = Number(request.headers.get("content-length") ?? 0);
   if (declared > 5 * 1024 * 1024 + 128_000) {
     return NextResponse.json(
@@ -77,6 +83,7 @@ export async function POST(request: Request) {
   }
 
   const bytes = await file.arrayBuffer();
+  const { uploadOwnDocument } = await import("@/lib/verification/service");
   const result = await uploadOwnDocument(
     user,
     docType as DocType,

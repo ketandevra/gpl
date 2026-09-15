@@ -1,11 +1,14 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { getSquadSize } from "@/lib/settings/app";
 import { listPlayersByTeam } from "@/lib/teams/queries";
+import {
+  cancelTeamInvite,
+  invitePlayerToTeam,
+  listPendingInvitesForTeam,
+} from "@/lib/teams/invites";
 import {
   removeTeamPlayer,
   requireTeamManagerOrAdmin,
-  setTeamRoster,
 } from "@/lib/teams/service";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -16,8 +19,11 @@ export async function GET(_request: Request, context: Ctx) {
   if ("error" in auth) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
-  const players = await listPlayersByTeam(id);
-  return NextResponse.json({ players });
+  const [players, invites] = await Promise.all([
+    listPlayersByTeam(id),
+    listPendingInvitesForTeam(id),
+  ]);
+  return NextResponse.json({ players, invites });
 }
 
 const addMemberSchema = z.object({
@@ -26,10 +32,11 @@ const addMemberSchema = z.object({
 });
 
 const removeMemberSchema = z.object({
-  player_id: z.string().uuid(),
+  player_id: z.string().uuid().optional(),
+  invite_id: z.string().uuid().optional(),
 });
 
-/** Add one verified player to the team roster (captain or admin). */
+/** Invite one verified player. They join the roster only after accepting. */
 export async function POST(request: Request, context: Ctx) {
   const { id } = await context.params;
   const auth = await requireTeamManagerOrAdmin(id);
@@ -52,43 +59,19 @@ export async function POST(request: Request, context: Ctx) {
     );
   }
 
-  const existing = await listPlayersByTeam(id);
-  if (existing.some((p) => p.id === parsed.data.player_id)) {
-    return NextResponse.json(
-      { error: "This player is already added to this team." },
-      { status: 400 },
-    );
-  }
-
-  const squadSize = await getSquadSize();
-  if (existing.length >= squadSize) {
-    return NextResponse.json(
-      {
-        error: `Squad is full. A team can have at most ${squadSize} players.`,
-      },
-      { status: 400 },
-    );
-  }
-
-  const members = [
-    ...existing.map((p) => ({
-      player_id: p.id,
-      jersey_number: p.jersey_number,
-    })),
-    {
-      player_id: parsed.data.player_id,
-      jersey_number: parsed.data.jersey_number ?? null,
-    },
-  ];
-
-  const result = await setTeamRoster(auth.user, id, { members });
+  const result = await invitePlayerToTeam(
+    auth.user,
+    id,
+    parsed.data.player_id,
+    parsed.data.jersey_number ?? null,
+  );
   if ("error" in result) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }
   return NextResponse.json(result, { status: 201 });
 }
 
-/** Remove one player from the squad (captain or admin; pending teams). */
+/** Remove a squad member or withdraw a pending invite. */
 export async function DELETE(request: Request, context: Ctx) {
   const { id } = await context.params;
   const auth = await requireTeamManagerOrAdmin(id);
@@ -111,9 +94,32 @@ export async function DELETE(request: Request, context: Ctx) {
     );
   }
 
+  if (parsed.data.invite_id) {
+    const cancelled = await cancelTeamInvite(
+      auth.user,
+      id,
+      parsed.data.invite_id,
+    );
+    if ("error" in cancelled) {
+      return NextResponse.json(
+        { error: cancelled.error },
+        { status: cancelled.status },
+      );
+    }
+    return NextResponse.json(cancelled);
+  }
+
+  if (!parsed.data.player_id) {
+    return NextResponse.json(
+      { error: "player_id or invite_id is required." },
+      { status: 400 },
+    );
+  }
+
   const result = await removeTeamPlayer(auth.user, id, parsed.data.player_id);
   if ("error" in result) {
     return NextResponse.json({ error: result.error }, { status: result.status });
   }
-  return NextResponse.json(result);
+  const invites = await listPendingInvitesForTeam(id);
+  return NextResponse.json({ ...result, invites });
 }

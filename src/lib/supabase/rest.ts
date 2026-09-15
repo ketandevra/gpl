@@ -22,7 +22,18 @@ type RestOptions = {
   body?: unknown;
   prefer?: string;
   signal?: AbortSignal;
+  timeoutMs?: number;
 };
+
+function formatRestFailure(status: number, data: unknown, fallback: string): string {
+  if (typeof data === "object" && data) {
+    const row = data as { message?: unknown; details?: unknown; hint?: unknown };
+    const parts = [row.message, row.details, row.hint]
+      .filter((part): part is string => typeof part === "string" && part.trim().length > 0);
+    if (parts.length) return parts.join(" — ");
+  }
+  return fallback || `Supabase request failed (${status})`;
+}
 
 export class RestError extends Error {
   status: number;
@@ -53,7 +64,7 @@ export async function adminRest<T = unknown>(
   }
 
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 12_000);
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 12_000);
   const signal = options.signal ?? controller.signal;
 
   try {
@@ -76,14 +87,11 @@ export async function adminRest<T = unknown>(
     }
 
     if (!res.ok) {
-      const message =
-        typeof data === "object" &&
-        data &&
-        "message" in data &&
-        typeof (data as { message: unknown }).message === "string"
-          ? (data as { message: string }).message
-          : `Supabase request failed (${res.status})`;
-      throw new RestError(message, res.status, data);
+      throw new RestError(
+        formatRestFailure(res.status, data, `Supabase request failed (${res.status})`),
+        res.status,
+        data,
+      );
     }
 
     return data as T;
@@ -125,10 +133,11 @@ export async function withRetry<T>(
 export async function adminRpc<T = unknown>(
   fnName: string,
   args: Record<string, unknown> = {},
+  options: { timeoutMs?: number } = {},
 ): Promise<T> {
   const { url, serviceKey } = getConfig();
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20_000);
+  const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? 20_000);
 
   try {
     const res = await fetch(`${url}/rest/v1/rpc/${fnName}`, {
@@ -154,14 +163,11 @@ export async function adminRpc<T = unknown>(
     }
 
     if (!res.ok) {
-      const message =
-        typeof data === "object" &&
-        data &&
-        "message" in data &&
-        typeof (data as { message: unknown }).message === "string"
-          ? (data as { message: string }).message
-          : `RPC ${fnName} failed (${res.status})`;
-      throw new RestError(message, res.status, data);
+      throw new RestError(
+        formatRestFailure(res.status, data, `RPC ${fnName} failed (${res.status})`),
+        res.status,
+        data,
+      );
     }
 
     return data as T;

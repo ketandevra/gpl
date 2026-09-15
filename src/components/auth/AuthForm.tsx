@@ -3,6 +3,13 @@
 import Link from "next/link";
 import { useState } from "react";
 
+function toTitleCase(value: string): string {
+  return value.replace(
+    /[^\s]+/g,
+    (word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase(),
+  );
+}
+
 type AuthFormProps = {
   mode: "login" | "register";
   nextPath?: string;
@@ -71,7 +78,10 @@ export function AuthForm({
         body: JSON.stringify(body),
       });
 
-      let data: { error?: string; user?: { role: string } } = {};
+      let data: {
+        error?: string;
+        user?: { role: string; verification_status?: string };
+      } = {};
       try {
         data = (await res.json()) as typeof data;
       } catch {
@@ -84,7 +94,16 @@ export function AuthForm({
         return;
       }
 
-      // Always land on home after auth unless a specific deep-link was requested
+      // Full navigation so the session cookie is definitely applied.
+      const needsPlayerRegistration =
+        data.user?.role !== "admin" &&
+        data.user?.verification_status !== "verified";
+      if (mode === "register" || needsPlayerRegistration) {
+        window.location.assign("/verify");
+        return;
+      }
+
+      // Verified users land on home unless a specific deep-link was requested
       // (e.g. /admin, /verify). Never send users to /profile after login.
       const requested =
         nextPath && nextPath.startsWith("/") ? nextPath : "/";
@@ -97,7 +116,6 @@ export function AuthForm({
           ? "/"
           : requested;
 
-      // Full navigation so the session cookie is definitely applied.
       window.location.assign(destination);
     } catch {
       setError("Network error. Please try again.");
@@ -134,7 +152,9 @@ export function AuthForm({
         {mode === "login" ? "Login" : "Create account"}
       </h1>
       <p className="mt-2 text-sm text-[#3e2723]/65">
-        Use your mobile number and 4-digit PIN.
+        {mode === "register"
+          ? "Use your mobile number and 4-digit PIN. Next you’ll register as a player."
+          : "Use your mobile number and 4-digit PIN."}
       </p>
 
       <div className="mt-6 space-y-4">
@@ -145,7 +165,8 @@ export function AuthForm({
             </span>
             <input
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              placeholder="Enter your full name as per Aadhaar"
+              onChange={(e) => setName(toTitleCase(e.target.value))}
               className="w-full rounded-xl border border-[#3e2723]/15 bg-[#fdf6e8] px-3 py-3 text-base outline-none ring-[#2aa7ad] focus:ring-2"
               autoComplete="name"
             />
@@ -163,7 +184,7 @@ export function AuthForm({
             onChange={(e) =>
               setMobile(e.target.value.replace(/\D/g, "").slice(0, 10))
             }
-            placeholder="9636933097"
+            placeholder="Enter your mobile number"
             className="w-full rounded-xl border border-[#3e2723]/15 bg-[#fdf6e8] px-3 py-3 text-base tracking-wide outline-none ring-[#2aa7ad] focus:ring-2"
             autoComplete="tel"
           />
@@ -176,10 +197,15 @@ export function AuthForm({
           <input
             inputMode="numeric"
             maxLength={4}
-            type="password"
+            type={pin ? "password" : "text"}
             value={pin}
+            placeholder="Enter your 4-digit PIN"
+            spellCheck={false}
+            autoCorrect="off"
             onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-            className="w-full rounded-xl border border-[#3e2723]/15 bg-[#fdf6e8] px-3 py-3 text-base tracking-[0.4em] outline-none ring-[#2aa7ad] focus:ring-2"
+            className={`w-full rounded-xl border border-[#3e2723]/15 bg-[#fdf6e8] px-3 py-3 font-sans text-base outline-none ring-[#2aa7ad] placeholder:tracking-normal placeholder:font-sans focus:ring-2 ${
+              pin ? "tracking-[0.4em]" : "tracking-normal"
+            }`}
             autoComplete={mode === "login" ? "current-password" : "new-password"}
           />
         </label>
@@ -192,12 +218,17 @@ export function AuthForm({
             <input
               inputMode="numeric"
               maxLength={4}
-              type="password"
+              type={confirmPin ? "password" : "text"}
               value={confirmPin}
+              placeholder="Confirm your 4-digit PIN"
+              spellCheck={false}
+              autoCorrect="off"
               onChange={(e) =>
                 setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 4))
               }
-              className="w-full rounded-xl border border-[#3e2723]/15 bg-[#fdf6e8] px-3 py-3 text-base tracking-[0.4em] outline-none ring-[#2aa7ad] focus:ring-2"
+              className={`w-full rounded-xl border border-[#3e2723]/15 bg-[#fdf6e8] px-3 py-3 font-sans text-base outline-none ring-[#2aa7ad] placeholder:tracking-normal placeholder:font-sans focus:ring-2 ${
+                confirmPin ? "tracking-[0.4em]" : "tracking-normal"
+              }`}
               autoComplete="new-password"
             />
           </label>

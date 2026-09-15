@@ -10,6 +10,12 @@ export type TeamRegistrationStatus =
   | "pending"
   | "approved"
   | "rejected";
+export type TeamInviteStatus =
+  | "pending"
+  | "accepted"
+  | "declined"
+  | "cancelled";
+export type TeamOwnerRequestStatus = "pending" | "approved" | "rejected";
 export type PlayerRole =
   | "batsman"
   | "bowler"
@@ -290,6 +296,58 @@ export interface Database {
         };
         Update: Partial<Database["public"]["Tables"]["team_players"]["Insert"]>;
       };
+      team_invites: {
+        Row: {
+          id: string;
+          team_id: string;
+          player_id: string;
+          invited_by: string | null;
+          status: TeamInviteStatus;
+          created_at: string;
+          responded_at: string | null;
+        };
+        Insert: {
+          id?: string;
+          team_id: string;
+          player_id: string;
+          invited_by?: string | null;
+          status?: TeamInviteStatus;
+          created_at?: string;
+          responded_at?: string | null;
+        };
+        Update: Partial<Database["public"]["Tables"]["team_invites"]["Insert"]>;
+      };
+      team_owner_requests: {
+        Row: {
+          id: string;
+          tournament_id: string;
+          requester_id: string;
+          name: string;
+          status: TeamOwnerRequestStatus;
+          rejection_reason: string | null;
+          team_id: string | null;
+          reviewed_by: string | null;
+          reviewed_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          tournament_id: string;
+          requester_id: string;
+          name: string;
+          status?: TeamOwnerRequestStatus;
+          rejection_reason?: string | null;
+          team_id?: string | null;
+          reviewed_by?: string | null;
+          reviewed_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: Partial<
+          Database["public"]["Tables"]["team_owner_requests"]["Insert"]
+        >;
+      };
       matches: {
         Row: {
           id: string;
@@ -472,6 +530,8 @@ export interface Database {
       user_role: UserRole;
       tournament_status: TournamentStatus;
       team_registration_status: TeamRegistrationStatus;
+      team_invite_status: TeamInviteStatus;
+      team_owner_request_status: TeamOwnerRequestStatus;
       player_role: PlayerRole;
       match_type: MatchType;
       match_status: MatchStatus;

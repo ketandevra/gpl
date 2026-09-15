@@ -37,6 +37,18 @@ export function teamStatusLabel(status: TeamRegistrationStatus): string {
   }
 }
 
+export function shortNameFromTeamName(name: string): string {
+  const words = name.trim().split(/\s+/).filter(Boolean);
+  const initials = words
+    .map((word) => word.replace(/[^a-zA-Z0-9]/g, "")[0] ?? "")
+    .join("")
+    .toUpperCase();
+  if (initials.length >= 2 && initials.length <= 6) return initials;
+  const compact = name.replace(/[^a-zA-Z0-9]/g, "").toUpperCase();
+  if (compact.length >= 2) return compact.slice(0, 6);
+  return (compact + "XX").slice(0, 2);
+}
+
 export function playerAvailabilityLabel(player: TeamPlayerView): string {
   if (player.locked_team_id) {
     return player.locked_team_name

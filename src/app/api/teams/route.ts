@@ -6,6 +6,8 @@ import {
   listApprovedTeams,
   getManagerName,
 } from "@/lib/teams/queries";
+import { requestTeamOwnership } from "@/lib/teams/owner-requests";
+import { playerCreateTeamSchema } from "@/lib/validations/teams";
 import { isSupabaseAdminConfigured } from "@/lib/supabase/env";
 
 export async function GET() {
@@ -38,8 +40,8 @@ export async function GET() {
   });
 }
 
-/** Public team create removed — only admins create teams. */
-export async function POST() {
+/** Verified player requests to become a team owner. Team is created only after admin approval. */
+export async function POST(request: Request) {
   const user = await getCurrentUser();
   if (!user) {
     return NextResponse.json({ error: "Please sign in." }, { status: 401 });
@@ -52,11 +54,25 @@ export async function POST() {
       { status: 400 },
     );
   }
-  return NextResponse.json(
-    {
-      error:
-        "Only an admin can create a team. Ask the admin to create your team and assign you as captain.",
-    },
-    { status: 403 },
-  );
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+  }
+
+  const parsed = playerCreateTeamSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Enter a team name." },
+      { status: 400 },
+    );
+  }
+
+  const result = await requestTeamOwnership(user, parsed.data);
+  if ("error" in result) {
+    return NextResponse.json({ error: result.error }, { status: result.status });
+  }
+  return NextResponse.json({ request: result.request }, { status: 201 });
 }

@@ -18,8 +18,9 @@ export default async function VerifyPage() {
         Register as player
       </h1>
       <p className="mt-2 text-sm text-[#3e2723]/65">
-        Upload Aadhaar front and back so an admin can verify you before team
-        selection.
+        Enter your playing role, t-shirt size, and Aadhaar number, then upload
+        both Aadhaar photos. Front and back are required before you can submit.
+        Photos are deleted permanently after verification.
       </p>
       <div className="mt-6">
         <VerificationClient />

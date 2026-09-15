@@ -5,6 +5,7 @@ import { SiteHeader } from "@/components/layout/SiteHeader";
 import { getCurrentUser } from "@/lib/auth/session";
 import { APP_NAME, APP_SHORT_NAME, LOGO_PATH } from "@/lib/constants";
 import { hasLiveMatches } from "@/lib/matches/live";
+import { countPendingInvitesForUser } from "@/lib/teams/invites";
 import "./globals.css";
 
 const outfit = Outfit({
@@ -53,6 +54,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
     hasLiveMatches(),
     getCurrentUser(),
   ]);
+  const inviteCount = user ? await countPendingInvitesForUser(user.id) : 0;
 
   return (
     <html
@@ -60,7 +62,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       className={`${outfit.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col">
-        <SiteHeader hasLive={hasLive} user={user} />
+        <SiteHeader hasLive={hasLive} user={user} inviteCount={inviteCount} />
         <main className="flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-8">
           {children}
         </main>

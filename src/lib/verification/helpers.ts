@@ -10,14 +10,28 @@ export const AADHAAR_MIME = new Set([
   "image/heif",
 ]);
 
-export function isValidAadhaarNumber(value: string): boolean {
-  return /^[0-9]{12}$/.test(value);
+export function aadhaarDigits(value: string): string {
+  return value.replace(/\D/g, "").slice(0, 12);
 }
 
-/** Mask for admin display: XXXX XXXX 1234 */
+/** Display / input mask: XXXX-XXXX-XXXX */
+export function formatAadhaarInput(value: string): string {
+  const digits = aadhaarDigits(value);
+  const parts = [digits.slice(0, 4), digits.slice(4, 8), digits.slice(8, 12)].filter(
+    Boolean,
+  );
+  return parts.join("-");
+}
+
+export function isValidAadhaarNumber(value: string): boolean {
+  return /^[0-9]{12}$/.test(aadhaarDigits(value));
+}
+
+/** Mask for display: XXXX-XXXX-1234 */
 export function maskAadhaar(aadhaar: string | null | undefined): string | null {
-  if (!aadhaar || aadhaar.length !== 12) return null;
-  return `XXXX XXXX ${aadhaar.slice(-4)}`;
+  const digits = aadhaar ? aadhaarDigits(aadhaar) : "";
+  if (digits.length !== 12) return null;
+  return `XXXX-XXXX-${digits.slice(-4)}`;
 }
 
 export function verificationStatusLabel(status: VerificationStatus): string {

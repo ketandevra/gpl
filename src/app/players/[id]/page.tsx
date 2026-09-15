@@ -13,7 +13,10 @@ import {
 import { adminRest, withRetry } from "@/lib/supabase/rest";
 import { isSupabaseAdminConfigured } from "@/lib/supabase/env";
 
-type PageProps = { params: Promise<{ id: string }> };
+type PageProps = {
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ from?: string }>;
+};
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +26,23 @@ export async function generateMetadata({ params }: PageProps) {
   return { title: player ? formatPlayerLabel(player) : "Player" };
 }
 
-export default async function PlayerDetailPage({ params }: PageProps) {
+function teamReturnPath(from: string | undefined): string | null {
+  if (!from) return null;
+  const path = from.startsWith("/") ? from : `/${from}`;
+  if (
+    /^\/teams\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      path,
+    )
+  ) {
+    return path;
+  }
+  return null;
+}
+
+export default async function PlayerDetailPage({ params, searchParams }: PageProps) {
   const { id } = await params;
+  const { from } = await searchParams;
+  const backToTeam = teamReturnPath(from);
   const player = await getPlayerById(id);
   if (!player) notFound();
 
@@ -86,7 +104,9 @@ export default async function PlayerDetailPage({ params }: PageProps) {
 
   return (
     <div className="mx-auto max-w-lg px-4 py-8">
-      <BackLink href="/players">All players</BackLink>
+      <BackLink href={backToTeam ?? "/players"}>
+        {backToTeam ? "Back to team" : "All players"}
+      </BackLink>
 
       <div className="mt-5 flex flex-col items-center gap-3 rounded-2xl border border-[#3e2723]/10 bg-white p-6 shadow-sm">
         <UserAvatar

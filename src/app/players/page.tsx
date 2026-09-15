@@ -25,13 +25,13 @@ export default async function PlayersPage() {
       <h1 className="text-2xl font-bold text-[#3e2723]">Players</h1>
       <p className="mt-1 text-sm text-[#3e2723]/60">
         {tournament?.name
-          ? `Registered for ${tournament.name}`
-          : "Registered GPL players"}
+          ? `Verified players in ${tournament.name}`
+          : "Verified GPL players"}
       </p>
 
       {players.length === 0 ? (
         <div className="mt-8 rounded-2xl border border-dashed border-[#2aa7ad]/35 bg-white/60 px-5 py-8 text-center text-sm text-[#3e2723]/65">
-          No players to show yet. Captains add players when managing a squad.
+          No verified players to show yet.
         </div>
       ) : (
         <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -40,11 +40,9 @@ export default async function PlayersPage() {
               key={player.id}
               player={player}
               href={`/players/${player.id}`}
-              statusLine={
-                player.team_status === "pending"
-                  ? "Team pending approval"
-                  : undefined
-              }
+              hideTeamName
+              statusLine={player.team_name ?? "Available"}
+              statusTone={player.team_name ? "default" : "available"}
             />
           ))}
         </div>

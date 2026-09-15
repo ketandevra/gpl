@@ -11,6 +11,7 @@ import {
   listPlayersByTeam,
   teamStatusLabel,
 } from "@/lib/teams/queries";
+import { listPendingInvitesForTeam } from "@/lib/teams/invites";
 import { canManageTeam } from "@/lib/teams/service";
 
 type PageProps = {
@@ -39,10 +40,13 @@ export default async function TeamDetailPage({
   const isCaptain = Boolean(user && team.manager_id === user.id);
   const canViewPrivate = canAccessAdmin(user) || isCaptain;
 
-  const [players, captain_name, squadSize] = await Promise.all([
+  const [players, captain_name, squadSize, pendingInvites] = await Promise.all([
     listPlayersByTeam(id),
     getManagerName(team.manager_id),
     getSquadSize(),
+    canManageTeam(user, team)
+      ? listPendingInvitesForTeam(id)
+      : Promise.resolve([]),
   ]);
   const canEdit = canManageTeam(user, team);
   const captainCanEditSquad = canEdit && !team.approved;
@@ -53,8 +57,8 @@ export default async function TeamDetailPage({
 
       {query.created ? (
         <p className="mt-4 rounded-xl border border-[#2aa7ad]/25 bg-[#2aa7ad]/10 px-4 py-3 text-sm text-[#1a7f84]">
-          Team created. Captain can add squad members; admin will approve when
-          ready.
+          Team created. Captain can invite squad members; a player joins only
+          after they accept. Admin will approve when the squad is complete.
         </p>
       ) : null}
 
@@ -90,7 +94,7 @@ export default async function TeamDetailPage({
           <p className="mt-4 text-sm text-[#3e2723]/60">
             No players yet
             {isCaptain && !team.approved
-              ? " — use Manage squad below to add members."
+              ? " — use Manage squad below to invite members."
               : "."}
           </p>
         ) : (
@@ -114,7 +118,7 @@ export default async function TeamDetailPage({
                 <PlayerCard
                   key={player.id}
                   player={player}
-                  href={`/players/${player.id}`}
+                  href={`/players/${player.id}?from=/teams/${team.id}`}
                   statusLine={statusLine}
                 />
               );
@@ -123,20 +127,22 @@ export default async function TeamDetailPage({
         )}
       </section>
 
-      {captainCanEditSquad || (canAccessAdmin(user) && !team.approved) ? (
+      {captainCanEditSquad || canAccessAdmin(user) ? (
         <ManageSquadClient
           teamId={team.id}
           initialPlayers={players}
+          initialInvites={pendingInvites}
           canEdit={Boolean(captainCanEditSquad || canAccessAdmin(user))}
           approved={team.approved}
           squadSize={squadSize}
+          adminOverride={Boolean(canAccessAdmin(user))}
         />
       ) : null}
 
       {canEdit && !team.approved ? (
         <p className="mt-8 rounded-xl border border-[#f5b830]/40 bg-[#fff6df] px-4 py-3 text-sm text-[#3e2723]">
-          Pending squads can share players with other pending teams. Approval
-          locks each player to one team for this tournament.
+          Players join a pending squad only after they accept the captain’s
+          invite. Approval locks each player to one team for this tournament.
         </p>
       ) : null}
 
