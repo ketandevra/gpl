@@ -25,7 +25,8 @@ export async function GET(_request: Request, context: Ctx) {
     canAccessAdmin(user) || (user && team.manager_id === user.id);
 
   if (!team.approved && !canViewPrivate) {
-    return NextResponse.json({ error: "Team not found." }, { status: 404 });
+    const manager_name = await getManagerName(team.manager_id);
+    return NextResponse.json({ team, players: [], manager_name });
   }
 
   const [players, manager_name] = await Promise.all([

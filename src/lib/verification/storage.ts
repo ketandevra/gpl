@@ -59,6 +59,14 @@ export async function uploadAadhaarDocument(params: {
 
   if (error) {
     console.error("[verification] upload failed:", error.message);
+    if (/maximum|size|413|too large|exceed/i.test(error.message)) {
+      return {
+        error: "Photo is too large. Try a closer, clearer photo.",
+      };
+    }
+    if (/mime|type|not allowed/i.test(error.message)) {
+      return { error: "Use a JPG or PNG photo of the Aadhaar card." };
+    }
     return { error: "Could not upload document." };
   }
 

@@ -39,6 +39,9 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
+  minimumScale: 1,
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: "cover",
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#fdf6e8" },
@@ -66,7 +69,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <main className="flex-1 pb-[calc(4.5rem+env(safe-area-inset-bottom))] md:pb-8">
           {children}
         </main>
-        <MobileNavigation hasLive={hasLive} />
+        <MobileNavigation />
       </body>
     </html>
   );

@@ -6,11 +6,25 @@ type TeamCardProps = {
   team: TeamRow & { manager_name?: string | null; player_count?: number };
   href?: string;
   showStatus?: boolean;
+  highlight?: boolean;
+  actionLabel?: string;
 };
 
-export function TeamCard({ team, href, showStatus = false }: TeamCardProps) {
+export function TeamCard({
+  team,
+  href,
+  showStatus = false,
+  highlight = false,
+  actionLabel,
+}: TeamCardProps) {
   const content = (
-    <div className="flex h-full flex-col rounded-2xl border border-[#3e2723]/10 bg-white p-4 shadow-sm transition active:scale-[0.99] sm:hover:border-[#2aa7ad]/35 sm:hover:shadow-md">
+    <div
+      className={`flex h-full flex-col rounded-2xl border p-4 shadow-sm transition active:scale-[0.99] sm:hover:shadow-md ${
+        highlight
+          ? "border-[#2aa7ad]/40 bg-white sm:hover:border-[#2aa7ad]"
+          : "border-[#3e2723]/10 bg-white sm:hover:border-[#2aa7ad]/35"
+      }`}
+    >
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#2aa7ad]/15 text-sm font-bold text-[#1a7f84]">
@@ -22,7 +36,7 @@ export function TeamCard({ team, href, showStatus = false }: TeamCardProps) {
             </h2>
             {team.manager_name ? (
               <p className="mt-0.5 truncate text-xs text-[#3e2723]/55">
-                Manager: {team.manager_name}
+                Captain: {team.manager_name}
               </p>
             ) : null}
           </div>
@@ -44,6 +58,11 @@ export function TeamCard({ team, href, showStatus = false }: TeamCardProps) {
       {typeof team.player_count === "number" ? (
         <p className="mt-3 text-sm text-[#3e2723]/60">
           {team.player_count} player{team.player_count === 1 ? "" : "s"}
+        </p>
+      ) : null}
+      {actionLabel ? (
+        <p className="mt-3 text-sm font-semibold text-[#1a7f84]">
+          {actionLabel} →
         </p>
       ) : null}
     </div>

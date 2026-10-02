@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { roleLabel, type SessionUser } from "@/lib/auth/permissions";
-import { APP_NAME, APP_SHORT_NAME, NAV_ITEMS } from "@/lib/constants";
+import { APP_NAME, NAV_ITEMS } from "@/lib/constants";
 
 type SiteHeaderProps = {
   hasLive?: boolean;
@@ -33,20 +33,29 @@ export function SiteHeader({
 
   return (
     <header className="sticky top-0 z-40 border-b border-[#3e2723]/10 bg-[#3e2723]/95 text-white backdrop-blur-md supports-[backdrop-filter]:bg-[#3e2723]/90">
-      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-3 px-3 sm:h-16 sm:gap-4 sm:px-4">
-        <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+      <div className="flex h-14 items-center px-3 md:hidden">
+        <BrandLogo variant="mark" priority />
+        <p className="min-w-0 flex-1 px-2 text-center text-sm font-semibold leading-tight tracking-wide">
+          {APP_NAME}
+        </p>
+        <span className="pointer-events-none invisible" aria-hidden>
+          <BrandLogo variant="mark" href={null} />
+        </span>
+      </div>
+
+      <div className="mx-auto hidden h-16 max-w-6xl items-center justify-between gap-4 px-4 md:flex">
+        <div className="flex min-w-0 items-center gap-3">
           <BrandLogo variant="mark" priority />
           <div className="min-w-0 leading-tight">
-            <p className="truncate text-sm font-semibold tracking-wide sm:text-base">
-              <span className="sm:hidden">{APP_SHORT_NAME}</span>
-              <span className="hidden sm:inline">{APP_NAME}</span>
+            <p className="truncate text-base font-semibold tracking-wide">
+              {APP_NAME}
             </p>
-            <p className="hidden text-[11px] text-[#f5b830]/90 md:block">
+            <p className="text-[11px] text-[#f5b830]/90">
               {onAdmin
                 ? "Admin console"
                 : hasLive
-                  ? "Live now · Teams · Stats"
-                  : "Matches · Teams · Stats"}
+                  ? "Live now · Teams · Players"
+                  : "Teams · Players · Profile"}
             </p>
           </div>
         </div>
@@ -93,7 +102,7 @@ export function SiteHeader({
           {hasLive ? (
             <Link
               href="/live"
-              className="touch-target inline-flex items-center justify-center gap-1.5 rounded-full bg-[#d81b60] px-3 py-2 text-xs font-bold uppercase tracking-wide text-white sm:hidden"
+              className="touch-target inline-flex items-center justify-center gap-1.5 rounded-full bg-[#d81b60] px-3 py-2 text-xs font-bold uppercase tracking-wide text-white lg:hidden"
             >
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
               Live
@@ -102,7 +111,7 @@ export function SiteHeader({
           {user ? (
             <Link
               href="/profile"
-              className="touch-target relative inline-flex max-w-[11rem] items-center gap-2 rounded-full bg-[#f5b830]/95 py-1 pl-1 pr-2.5 text-[#3e2723] transition hover:bg-[#ffcf5c] active:scale-[0.98] sm:max-w-[14rem] sm:pr-3"
+              className="touch-target relative inline-flex max-w-[14rem] items-center gap-2 rounded-full bg-[#f5b830]/95 py-1 pl-1 pr-3 text-[#3e2723] transition hover:bg-[#ffcf5c] active:scale-[0.98]"
             >
               <span className="relative">
                 <UserAvatar

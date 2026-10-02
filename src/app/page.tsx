@@ -166,7 +166,7 @@ export default async function HomePage() {
         </section>
       ) : null}
 
-      <div className="mt-4 flex gap-2 overflow-x-auto pb-1 md:hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      {/* <div className="mt-4 flex gap-2 overflow-x-auto pb-1 md:hidden [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {[
           { href: "/players", label: "Players" },
           { href: "/profile", label: "Profile" },
@@ -181,7 +181,7 @@ export default async function HomePage() {
             {item.label}
           </Link>
         ))}
-      </div>
+      </div> */}
     </div>
   );
 }

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { compressImageFile } from "@/lib/images/compress-client";
 import {
   aadhaarDigits,
   formatAadhaarInput,
@@ -24,6 +25,13 @@ type RequestRow = {
   has_aadhaar: boolean;
   has_front?: boolean;
   has_back?: boolean;
+};
+
+type LookupUser = {
+  id: string;
+  name: string;
+  mobile_number: string;
+  verification_status: string;
 };
 
 type Detail = {
@@ -103,6 +111,10 @@ function historyLabel(action: string, summary: string) {
       return "Aadhaar number changed";
     case "documents_purged":
       return "Aadhaar photos permanently deleted";
+    case "document_uploaded":
+      return "Aadhaar photo uploaded";
+    case "document_uploaded_by_admin":
+      return "Admin uploaded Aadhaar photo";
     default:
       return summary.replace(/_/g, " ");
   }
@@ -124,6 +136,7 @@ function CheckDot({ ok, label }: { ok: boolean; label: string }) {
 export function AdminVerificationsClient() {
   const searchParams = useSearchParams();
   const [requests, setRequests] = useState<RequestRow[]>([]);
+  const [lookupUsers, setLookupUsers] = useState<LookupUser[]>([]);
   const [listLoading, setListLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
@@ -137,6 +150,9 @@ export function AdminVerificationsClient() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [uploading, setUploading] = useState<"aadhaar_front" | "aadhaar_back" | null>(
+    null,
+  );
   const [pendingForceRevoke, setPendingForceRevoke] = useState(false);
   const [mobileReview, setMobileReview] = useState(false);
 
@@ -149,15 +165,43 @@ export function AdminVerificationsClient() {
     );
   }, [requests, query]);
 
+  const unverifiedLookup = useMemo(() => {
+    const pendingIds = new Set(requests.map((r) => r.id));
+    const q = query.trim().toLowerCase();
+    return lookupUsers
+      .filter(
+        (u) =>
+          u.verification_status !== "verified" &&
+          u.verification_status !== "pending" &&
+          !pendingIds.has(u.id),
+      )
+      .filter(
+        (u) =>
+          !q ||
+          u.name.toLowerCase().includes(q) ||
+          u.mobile_number.includes(q),
+      );
+  }, [lookupUsers, requests, query]);
+
   const loadList = useCallback(async () => {
-    const res = await fetch("/api/admin/verifications");
-    const data = (await res.json()) as { requests?: RequestRow[]; error?: string };
-    if (!res.ok) {
+    const [verRes, usersRes] = await Promise.all([
+      fetch("/api/admin/verifications"),
+      fetch("/api/admin/users"),
+    ]);
+    const data = (await verRes.json()) as {
+      requests?: RequestRow[];
+      error?: string;
+    };
+    if (!verRes.ok) {
       setError(data.error ?? "Failed to load.");
       setListLoading(false);
       return;
     }
     setRequests(data.requests ?? []);
+    if (usersRes.ok) {
+      const usersData = (await usersRes.json()) as { users?: LookupUser[] };
+      setLookupUsers(usersData.users ?? []);
+    }
     setListLoading(false);
   }, []);
 
@@ -238,6 +282,26 @@ export function AdminVerificationsClient() {
       setError("Add a short rejection reason so the player knows what to fix.");
       return;
     }
+    if (decision === "verify") {
+      if (aadhaarDigits(aadhaarInput).length !== 12) {
+        setError("Enter the 12-digit Aadhaar number from the document.");
+        return;
+      }
+      const frontReady = Boolean(
+        detail?.documents.some(
+          (d) => d.doc_type === "aadhaar_front" && d.signed_url,
+        ),
+      );
+      const backReady = Boolean(
+        detail?.documents.some(
+          (d) => d.doc_type === "aadhaar_back" && d.signed_url,
+        ),
+      );
+      if (!frontReady || !backReady) {
+        setError("Upload both Aadhaar front and back photos before verifying.");
+        return;
+      }
+    }
     setBusy(true);
     setError(null);
     setMessage(null);
@@ -309,6 +373,66 @@ export function AdminVerificationsClient() {
     }
   }
 
+  async function uploadDocument(
+    docType: "aadhaar_front" | "aadhaar_back",
+    file: File,
+  ) {
+    if (!selectedId) return;
+    const looksLikeImage =
+      file.type.startsWith("image/") ||
+      !file.type ||
+      /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name);
+    if (!looksLikeImage) {
+      setError("Only image uploads are allowed.");
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      setError("Image must be 5 MB or smaller.");
+      return;
+    }
+    setUploading(docType);
+    setError(null);
+    setMessage(null);
+    try {
+      const compressed = await compressImageFile(file, "aadhaar");
+      const form = new FormData();
+      form.set("user_id", selectedId);
+      form.set("doc_type", docType);
+      form.set("file", compressed);
+      const res = await fetch("/api/admin/verifications/upload", {
+        method: "POST",
+        body: form,
+        credentials: "same-origin",
+      });
+      let data: { error?: string } = {};
+      try {
+        data = (await res.json()) as { error?: string };
+      } catch {
+        data = {};
+      }
+      if (!res.ok) {
+        setError(
+          data.error ||
+            (res.status === 405
+              ? "Upload is not available on this version. Refresh and try again."
+              : "Could not upload Aadhaar photo."),
+        );
+        return;
+      }
+      setMessage(
+        docType === "aadhaar_front"
+          ? "Aadhaar front uploaded."
+          : "Aadhaar back uploaded.",
+      );
+      await loadDetail(selectedId, { mobile: true });
+      await loadList();
+    } catch {
+      setError("Network error during upload.");
+    } finally {
+      setUploading(null);
+    }
+  }
+
   const hasFront = Boolean(
     detail?.documents.some((d) => d.doc_type === "aadhaar_front" && d.signed_url),
   );
@@ -318,7 +442,9 @@ export function AdminVerificationsClient() {
   const inQueue = Boolean(selectedId && requests.some((r) => r.id === selectedId));
   const reviewStatus = detail?.user.verification_status ?? null;
   const canApprove =
-    reviewStatus === "pending" || reviewStatus === "rejected";
+    reviewStatus === "pending" ||
+    reviewStatus === "rejected" ||
+    reviewStatus === "unverified";
   const canReject = reviewStatus === "pending";
   const canRevoke = reviewStatus === "verified";
 
@@ -333,9 +459,9 @@ export function AdminVerificationsClient() {
             Verification
           </h1>
           <p className="mt-1 max-w-xl text-sm text-[#3e2723]/60">
-            Check Aadhaar photos against the number, fix the player’s details
-            if needed, then approve or reject. After approval, Aadhaar photos
-            are deleted permanently.
+            Enter the player’s 12-digit Aadhaar number, attach front and back
+            photos, then approve. After approval, Aadhaar photos are deleted
+            permanently and only the number is kept.
           </p>
         </div>
         <Link
@@ -392,7 +518,7 @@ export function AdminVerificationsClient() {
             ) : filtered.length === 0 ? (
               <li className="rounded-2xl border border-dashed border-[#3e2723]/15 bg-white px-4 py-6 text-sm text-[#3e2723]/55">
                 {requests.length === 0
-                  ? "All caught up — no one is waiting."
+                  ? "No player-submitted requests. Open a user below to add Aadhaar and documents."
                   : "No names match that search."}
               </li>
             ) : (
@@ -438,6 +564,56 @@ export function AdminVerificationsClient() {
               })
             )}
           </ul>
+          {unverifiedLookup.length > 0 ? (
+            <div className="pt-2">
+              <p className="text-sm font-semibold text-[#3e2723]">
+                Add Aadhaar yourself
+                <span className="ml-2 rounded-full bg-[#3e2723]/8 px-2 py-0.5 text-xs font-bold text-[#3e2723]/55">
+                  {unverifiedLookup.length}
+                </span>
+              </p>
+              <p className="mt-1 text-xs text-[#3e2723]/50">
+                Players who have not submitted. Enter their Aadhaar number and
+                upload both photos, then approve.
+              </p>
+              <ul className="mt-2 max-h-[40vh] space-y-2 overflow-y-auto pr-0.5">
+                {unverifiedLookup.map((u) => {
+                  const active = selectedId === u.id;
+                  return (
+                    <li key={u.id}>
+                      <button
+                        type="button"
+                        onClick={() => void loadDetail(u.id)}
+                        className={`w-full rounded-2xl border p-3.5 text-left shadow-sm transition ${
+                          active
+                            ? "border-[#2aa7ad] bg-[#2aa7ad]/8 ring-1 ring-[#2aa7ad]/30"
+                            : "border-[#3e2723]/10 bg-white hover:border-[#2aa7ad]/40"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="font-semibold text-[#3e2723]">
+                            {u.name}
+                          </p>
+                          <span
+                            className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide ${statusChipClass(
+                              u.verification_status,
+                            )}`}
+                          >
+                            {verificationStatusLabel(
+                              u.verification_status as VerificationStatus,
+                            )}
+                          </span>
+                        </div>
+                        <p className="mt-0.5 text-sm text-[#3e2723]/60">
+                          {u.mobile_number}
+                        </p>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
         </aside>
 
         <section
@@ -449,7 +625,8 @@ export function AdminVerificationsClient() {
             <div className="px-5 py-16 text-center">
               <p className="font-semibold text-[#3e2723]">Select a player</p>
               <p className="mt-1 text-sm text-[#3e2723]/55">
-                Tap a name on the left to review their Aadhaar photos.
+                Choose a waiting request, or a player who has not submitted, then
+                add their Aadhaar number and photos.
               </p>
             </div>
           ) : detailLoading && !detail ? (
@@ -520,11 +697,11 @@ export function AdminVerificationsClient() {
               <div className="mt-5">
                 <div className="flex items-center justify-between gap-2">
                   <h3 className="text-sm font-semibold text-[#3e2723]">
-                    1. Check Aadhaar photos
+                    1. Aadhaar photos
                   </h3>
                   {reviewStatus !== "verified" ? (
                     <span className="text-xs text-[#3e2723]/45">
-                      Tap a photo to enlarge
+                      Upload or replace, then tap to enlarge
                     </span>
                   ) : null}
                 </div>
@@ -570,19 +747,40 @@ export function AdminVerificationsClient() {
                             />
                           </a>
                         ) : (
-                          <p className="mt-2 flex h-56 items-center justify-center px-3 text-center text-sm text-[#9f1239]/70">
-                            Player has not uploaded this side yet
+                          <p className="mt-2 flex h-40 items-center justify-center px-3 text-center text-sm text-[#9f1239]/70">
+                            No {label.toLowerCase()} photo yet
                           </p>
                         )}
+                        {reviewStatus !== "verified" ? (
+                          <label className="relative block cursor-pointer border-t border-[#3e2723]/8 bg-white px-3 py-2 text-center text-sm font-semibold text-[#1a7f84]">
+                            {uploading === type
+                              ? "Uploading…"
+                              : ready
+                                ? `Replace ${label.toLowerCase()}`
+                                : `Upload ${label.toLowerCase()}`}
+                            <input
+                              type="file"
+                              accept="image/jpeg,image/png,image/webp,.jpg,.jpeg,.png,.webp"
+                              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                              disabled={busy || uploading !== null}
+                              onChange={(e) => {
+                                const picked = e.target.files?.[0];
+                                e.target.value = "";
+                                if (picked) void uploadDocument(type, picked);
+                              }}
+                            />
+                          </label>
+                        ) : null}
                       </div>
                     );
                   })}
                 </div>
                 )}
                 {!hasFront || !hasBack ? (
-                  reviewStatus === "pending" ? (
+                  reviewStatus !== "verified" ? (
                     <p className="mt-2 text-xs text-[#9f1239]">
-                      Both photos should be present before you verify.
+                      Both front and back photos are required before you can
+                      approve.
                     </p>
                   ) : null
                 ) : null}
@@ -593,8 +791,8 @@ export function AdminVerificationsClient() {
                   2. Match the number and player details
                 </h3>
                 <p className="mt-1 text-xs text-[#3e2723]/50">
-                  Compare the Aadhaar number with the photos. Correct the name
-                  if it does not match.
+                  Type the 12-digit Aadhaar number from the document. Correct
+                  the name if it does not match.
                 </p>
                 <div className="mt-3 space-y-3">
                   <label className="block">
@@ -730,7 +928,16 @@ export function AdminVerificationsClient() {
                       {canApprove ? (
                         <button
                           type="button"
-                          disabled={busy}
+                          disabled={
+                            busy ||
+                            uploading !== null ||
+                            !hasFront ||
+                            !hasBack ||
+                            aadhaarDigits(aadhaarInput).length !== 12 ||
+                            nameInput.trim().length < 2 ||
+                            !roleInput ||
+                            !tshirtInput
+                          }
                           onClick={() => void decide("verify")}
                           className="rounded-full bg-[#2aa7ad] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
                         >

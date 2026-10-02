@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState, useEffect } from "react";
 import { PlayerIdCard } from "@/components/auth/PlayerIdCard";
+import { AvatarCropDialog } from "@/components/profile/AvatarCropDialog";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { roleLabel, type SessionUser } from "@/lib/auth/permissions";
 import { compressImageFile } from "@/lib/images/compress-client";
@@ -45,6 +46,7 @@ export function ProfileClient({
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  const [cropFile, setCropFile] = useState<File | null>(null);
   const [showIdCard, setShowIdCard] = useState(false);
   const [pendingInvites, setPendingInvites] = useState(invites);
   const [inviteBusy, setInviteBusy] = useState<string | null>(null);
@@ -113,7 +115,7 @@ export function ProfileClient({
     }
   }
 
-  async function onPickPhoto(file: File | undefined) {
+  function onPickPhoto(file: File | undefined) {
     if (!file) return;
     if (!file.type.startsWith("image/")) {
       setError("Only image uploads are allowed.");
@@ -123,11 +125,19 @@ export function ProfileClient({
       setError("Image must be 5 MB or smaller.");
       return;
     }
+    setError(null);
+    setMessage(null);
+    setCropFile(file);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  async function uploadCroppedPhoto(cropped: File) {
+    setCropFile(null);
     setUploading(true);
     setError(null);
     setMessage(null);
     try {
-      const compressed = await compressImageFile(file, "avatar");
+      const compressed = await compressImageFile(cropped, "avatar");
       const form = new FormData();
       form.set("file", compressed);
       const res = await fetch("/api/profile/avatar", {
@@ -150,7 +160,6 @@ export function ProfileClient({
       setError("Network error during upload.");
     } finally {
       setUploading(false);
-      if (fileRef.current) fileRef.current.value = "";
     }
   }
 
@@ -166,8 +175,8 @@ export function ProfileClient({
             name={user.name}
             src={avatarUrl}
             size="lg"
-            shape="rounded"
-            fit="contain"
+            shape="circle"
+            fit="cover"
             className="border-2 border-[#2aa7ad]/30 shadow-sm"
           />
           <label
@@ -390,6 +399,14 @@ export function ProfileClient({
       >
         {loading ? "Signing out…" : "Log out"}
       </button>
+
+      {cropFile ? (
+        <AvatarCropDialog
+          file={cropFile}
+          onCancel={() => setCropFile(null)}
+          onConfirm={(cropped) => void uploadCroppedPhoto(cropped)}
+        />
+      ) : null}
 
       {canShowIdCard && playerId ? (
         <PlayerIdCard

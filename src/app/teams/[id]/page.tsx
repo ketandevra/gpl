@@ -39,9 +39,10 @@ export default async function TeamDetailPage({
   const user = await getCurrentUser();
   const isCaptain = Boolean(user && team.manager_id === user.id);
   const canViewPrivate = canAccessAdmin(user) || isCaptain;
+  const canViewSquad = Boolean(team.approved || canViewPrivate);
 
   const [players, captain_name, squadSize, pendingInvites] = await Promise.all([
-    listPlayersByTeam(id),
+    canViewSquad ? listPlayersByTeam(id) : Promise.resolve([]),
     getManagerName(team.manager_id),
     getSquadSize(),
     canManageTeam(user, team)
@@ -82,6 +83,7 @@ export default async function TeamDetailPage({
         </div>
       </div>
 
+      {canViewSquad ? (
       <section className="mt-8">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-lg font-semibold text-[#3e2723]">Squad</h2>
@@ -126,6 +128,15 @@ export default async function TeamDetailPage({
           </div>
         )}
       </section>
+      ) : (
+        <section className="mt-8 rounded-2xl border border-[#f5b830]/35 bg-[#fff6df] px-5 py-6">
+          <h2 className="text-lg font-semibold text-[#3e2723]">Squad</h2>
+          <p className="mt-2 text-sm text-[#3e2723]/70">
+            Squad and other team details will be shown after admin approves
+            this team.
+          </p>
+        </section>
+      )}
 
       {captainCanEditSquad || canAccessAdmin(user) ? (
         <ManageSquadClient

@@ -46,8 +46,10 @@ export async function optimizeImageBuffer(
   const { maxEdge, quality, maxOutputBytes } = PRESETS[preset];
 
   if (!canUseSharp()) {
-    if (bytes.byteLength > IMAGE_INPUT_MAX_BYTES) {
-      return { error: "Image must be 5 MB or smaller." };
+    if (bytes.byteLength > maxOutputBytes) {
+      return {
+        error: "Photo is too large. Try a closer, clearer photo.",
+      };
     }
     return { buffer: bytes, mimeType: "image/jpeg", size: bytes.byteLength };
   }

@@ -48,21 +48,41 @@ export default async function TeamsPage({ searchParams }: PageProps) {
       : Promise.resolve(null),
   ]);
 
-  const cards = await Promise.all(
-    teams.map(async (team) => {
-      const [manager_name, players] = await Promise.all([
-        getManagerName(team.manager_id),
-        listPlayersByTeam(team.id),
-      ]);
-      return { ...team, manager_name, player_count: players.length };
-    }),
-  );
+  const [cards, myCards] = await Promise.all([
+    Promise.all(
+      teams.map(async (team) => {
+        const approved = team.registration_status === "approved";
+        const [manager_name, players] = await Promise.all([
+          getManagerName(team.manager_id),
+          approved ? listPlayersByTeam(team.id) : Promise.resolve([]),
+        ]);
+        return {
+          ...team,
+          manager_name,
+          player_count: approved ? players.length : undefined,
+        };
+      }),
+    ),
+    Promise.all(
+      myTeams.map(async (team) => {
+        const players = await listPlayersByTeam(team.id);
+        return {
+          ...team,
+          manager_name: user?.name ?? null,
+          player_count: players.length,
+        };
+      }),
+    ),
+  ]);
 
   const canRequestOwner =
     Boolean(user) &&
     !canAccessAdmin(user) &&
     myTeams.length === 0 &&
     !pendingRequest;
+
+  const myIds = new Set(myCards.map((team) => team.id));
+  const publicCards = cards.filter((team) => !myIds.has(team.id));
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
@@ -108,49 +128,64 @@ export default async function TeamsPage({ searchParams }: PageProps) {
         <p className="mt-6 rounded-2xl border border-[#2aa7ad]/25 bg-[#2aa7ad]/10 px-4 py-3 text-sm text-[#1a7f84]">
           Your request
           {pendingRequest ? ` for “${pendingRequest.name}”` : ""} is waiting
-          for admin approval. The team will appear here only after it is
+          for admin approval. The team is created after they approve this
+          request. Squad details stay private until the team itself is
           approved.
         </p>
       ) : null}
 
-      {myTeams.length > 0 ? (
-        <section className="mt-6 rounded-2xl border border-[#2aa7ad]/25 bg-[#2aa7ad]/8 p-4">
-          <h2 className="text-sm font-semibold text-[#1a7f84]">Your team(s)</h2>
-          <ul className="mt-2 space-y-2">
-            {myTeams.map((t) => (
-              <li key={t.id}>
-                <Link
-                  href={`/teams/${t.id}`}
-                  className="font-semibold text-[#3e2723] hover:text-[#1a7f84]"
-                >
-                  {t.name} ({t.short_name}) — manage squad →
-                </Link>
-              </li>
+      {myCards.length > 0 ? (
+        <section className="mt-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#2aa7ad]">
+            Captain
+          </p>
+          <h2 className="mt-1 text-lg font-bold text-[#3e2723]">
+            {myCards.length === 1 ? "Your team" : "Your teams"}
+          </h2>
+          <p className="mt-1 text-sm text-[#3e2723]/60">
+            Invite players and manage the squad. Other players see the squad
+            only after admin approval.
+          </p>
+          <div className="mt-4 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {myCards.map((team) => (
+              <TeamCard
+                key={team.id}
+                team={team}
+                href={`/teams/${team.id}`}
+                showStatus
+                highlight
+                actionLabel="Manage squad"
+              />
             ))}
-          </ul>
+          </div>
         </section>
       ) : null}
 
-      {cards.length === 0 ? (
+      {publicCards.length === 0 && myCards.length === 0 ? (
         <div className="mt-8 rounded-2xl border border-dashed border-[#2aa7ad]/35 bg-white/60 px-5 py-8 text-center">
           <p className="font-medium text-[#3e2723]">No teams yet</p>
           <p className="mt-2 text-sm text-[#3e2723]/60">
-            A verified player can request to become a team owner. Admin
-            approval creates the team. Captains then invite squad members.
+            A verified player can request to become a team owner. Pending
+            teams show the captain only; the squad is visible after approval.
           </p>
         </div>
-      ) : (
-        <div className="mt-6 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {cards.map((team) => (
-            <TeamCard
-              key={team.id}
-              team={team}
-              href={`/teams/${team.id}`}
-              showStatus
-            />
-          ))}
-        </div>
-      )}
+      ) : publicCards.length > 0 ? (
+        <section className="mt-8">
+          {myCards.length > 0 ? (
+            <h2 className="mb-4 text-lg font-bold text-[#3e2723]">All teams</h2>
+          ) : null}
+          <div className="grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {publicCards.map((team) => (
+              <TeamCard
+                key={team.id}
+                team={team}
+                href={`/teams/${team.id}`}
+                showStatus
+              />
+            ))}
+          </div>
+        </section>
+      ) : null}
     </div>
   );
 }

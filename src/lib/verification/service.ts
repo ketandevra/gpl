@@ -31,6 +31,68 @@ export {
 };
 export type { DocType, UserVerificationRow, VerificationDocRow } from "@/lib/verification/queries";
 
+async function persistUploadedDocument(params: {
+  actorId: string;
+  userId: string;
+  docType: DocType;
+  bytes: ArrayBuffer;
+  mimeType: string;
+  action: string;
+}): Promise<{ ok: true } | { error: string; status: number }> {
+  const { uploadAadhaarDocument } = await import("@/lib/verification/storage");
+  const uploaded = await uploadAadhaarDocument({
+    userId: params.userId,
+    docType: params.docType,
+    bytes: params.bytes,
+    mimeType: params.mimeType,
+  });
+  if ("error" in uploaded) {
+    return { error: uploaded.error, status: 400 };
+  }
+
+  try {
+    await withRetry(() =>
+      adminRest("verification_documents", {
+        method: "DELETE",
+        query: `?user_id=eq.${encodeURIComponent(params.userId)}&doc_type=eq.${params.docType}`,
+      }),
+    );
+  } catch {
+    // ignore missing row
+  }
+
+  try {
+    await withRetry(() =>
+      adminRest("verification_documents", {
+        method: "POST",
+        prefer: "return=minimal",
+        body: [
+          {
+            user_id: params.userId,
+            doc_type: params.docType,
+            storage_path: uploaded.path,
+            mime_type: "image/jpeg",
+            file_size: uploaded.size,
+          },
+        ],
+      }),
+    );
+  } catch (err) {
+    console.error("[verification] save document row failed:", err);
+    return { error: "Could not save Aadhaar photo.", status: 500 };
+  }
+
+  await writeAuditLog({
+    actorId: params.actorId,
+    action: params.action,
+    entityType: "user",
+    entityId: params.userId,
+    newValue: { doc_type: params.docType },
+  });
+
+  return { ok: true };
+}
+
 export async function uploadOwnDocument(
   user: SessionUser,
   docType: DocType,
@@ -44,53 +106,44 @@ export async function uploadOwnDocument(
     };
   }
 
-  const { uploadAadhaarDocument } = await import("@/lib/verification/storage");
-  const uploaded = await uploadAadhaarDocument({
+  return persistUploadedDocument({
+    actorId: user.id,
     userId: user.id,
     docType,
     bytes,
     mimeType,
-  });
-  if ("error" in uploaded) {
-    return { error: uploaded.error, status: 400 };
-  }
-
-  try {
-    await withRetry(() =>
-      adminRest("verification_documents", {
-        method: "DELETE",
-        query: `?user_id=eq.${encodeURIComponent(user.id)}&doc_type=eq.${docType}`,
-      }),
-    );
-  } catch {
-    // ignore missing row
-  }
-
-  await withRetry(() =>
-    adminRest("verification_documents", {
-      method: "POST",
-      prefer: "return=minimal",
-      body: [
-        {
-          user_id: user.id,
-          doc_type: docType,
-          storage_path: uploaded.path,
-          mime_type: mimeType,
-          file_size: uploaded.size,
-        },
-      ],
-    }),
-  );
-
-  await writeAuditLog({
-    actorId: user.id,
     action: "verification.document_uploaded",
-    entityType: "user",
-    entityId: user.id,
-    newValue: { doc_type: docType },
   });
+}
 
-  return { ok: true };
+export async function uploadAdminDocument(
+  admin: SessionUser,
+  userId: string,
+  docType: DocType,
+  bytes: ArrayBuffer,
+  mimeType: string,
+): Promise<{ ok: true } | { error: string; status: number }> {
+  if (!canAccessAdmin(admin)) {
+    return { error: "Forbidden.", status: 403 };
+  }
+
+  const target = await getUserVerification(userId);
+  if (!target) return { error: "User not found.", status: 404 };
+  if (target.verification_status === "verified") {
+    return {
+      error: "This player is already verified. Revoke first to replace documents.",
+      status: 400,
+    };
+  }
+
+  return persistUploadedDocument({
+    actorId: admin.id,
+    userId,
+    docType,
+    bytes,
+    mimeType,
+    action: "verification.document_uploaded_by_admin",
+  });
 }
 
 export async function submitVerification(
@@ -429,6 +482,16 @@ export async function adminDecideVerification(params: {
     aadhaarDigits(params.aadhaar_number ?? "") || target.aadhaar_number;
   if (!aadhaar || !isValidAadhaarNumber(aadhaar)) {
     return { error: "Aadhaar number must be 12 digits.", status: 400 };
+  }
+
+  const docs = await listVerificationDocuments(params.userId);
+  const hasFront = docs.some((d) => d.doc_type === "aadhaar_front");
+  const hasBack = docs.some((d) => d.doc_type === "aadhaar_back");
+  if (!hasFront || !hasBack) {
+    return {
+      error: "Upload both Aadhaar front and back photos before verifying.",
+      status: 400,
+    };
   }
 
   try {

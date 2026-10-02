@@ -19,15 +19,13 @@ export const NAV_ITEMS = [
 ] as const;
 
 /**
- * Primary bottom tabs for phones — max 5 for thumb reach.
- * Secondary destinations stay in header overflow / profile later.
+ * Primary bottom tabs for phones — Home, Team, Players, Profile.
  */
 export const MOBILE_NAV_ITEMS = [
   { href: "/", label: "Home", icon: "home" },
-  { href: "/live", label: "Live", icon: "live" },
-  { href: "/matches", label: "Matches", icon: "matches" },
-  { href: "/teams", label: "Teams", icon: "teams" },
-  { href: "/stats", label: "Stats", icon: "stats" },
+  { href: "/teams", label: "Team", icon: "teams" },
+  { href: "/players", label: "Players", icon: "players" },
+  { href: "/profile", label: "Profile", icon: "profile" },
 ] as const;
 
 export const ADMIN_NAV_ITEMS = [
