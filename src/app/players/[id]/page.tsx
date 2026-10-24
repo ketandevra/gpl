@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { BackLink } from "@/components/ui/BackLink";
-import { UserAvatar } from "@/components/ui/UserAvatar";
+import { IconBat, IconShirt, IconTeam } from "@/components/ui/Icons";
 import { VerifiedBadge } from "@/components/ui/VerifiedBadge";
 import { getCurrentUser } from "@/lib/auth/session";
 import { canAccessAdmin } from "@/lib/auth/permissions";
@@ -17,9 +16,17 @@ import { adminRest, withRetry } from "@/lib/supabase/rest";
 import { isSupabaseAdminConfigured } from "@/lib/supabase/env";
 import { formatAadhaarInput } from "@/lib/verification/helpers";
 
+function initials(name: string) {
+  return name
+    .split(/\s+/)
+    .map((part) => part[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
+}
+
 type PageProps = {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ from?: string }>;
 };
 
 export const dynamic = "force-dynamic";
@@ -30,23 +37,8 @@ export async function generateMetadata({ params }: PageProps) {
   return { title: player ? formatPlayerLabel(player) : "Player" };
 }
 
-function teamReturnPath(from: string | undefined): string | null {
-  if (!from) return null;
-  const path = from.startsWith("/") ? from : `/${from}`;
-  if (
-    /^\/teams\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-      path,
-    )
-  ) {
-    return path;
-  }
-  return null;
-}
-
-export default async function PlayerDetailPage({ params, searchParams }: PageProps) {
+export default async function PlayerDetailPage({ params }: PageProps) {
   const { id } = await params;
-  const { from } = await searchParams;
-  const backToTeam = teamReturnPath(from);
   const [player, viewer] = await Promise.all([
     getPlayerById(id),
     getCurrentUser(),
@@ -54,13 +46,39 @@ export default async function PlayerDetailPage({ params, searchParams }: PagePro
   if (!player) notFound();
   const isAdmin = canAccessAdmin(viewer);
 
-  const lockedTeam = player.locked_team_id
-    ? await getTeamById(player.locked_team_id)
-    : null;
-
-  const career = isSupabaseAdminConfigured()
-    ? await getCareerStats(id).catch(() => null)
-    : null;
+  const configured = isSupabaseAdminConfigured();
+  const [lockedTeam, career, memberships, linkedUsers] = await Promise.all([
+    player.locked_team_id ? getTeamById(player.locked_team_id) : null,
+    configured ? getCareerStats(id).catch(() => null) : null,
+    configured
+      ? withRetry(() =>
+          adminRest<Array<{ team_id: string; jersey_number: number | null }>>(
+            "team_players",
+            {
+              query: `?player_id=eq.${encodeURIComponent(id)}&select=team_id,jersey_number&limit=10`,
+            },
+          ),
+        )
+      : Promise.resolve([]),
+    configured && player.user_id
+      ? withRetry(() =>
+          adminRest<
+            Array<{
+              avatar_url: string | null;
+              verification_status: string;
+              mobile_number: string | null;
+              aadhaar_number: string | null;
+            }>
+          >("users", {
+            query: `?id=eq.${encodeURIComponent(player.user_id!)}&select=${
+              isAdmin
+                ? "avatar_url,verification_status,mobile_number,aadhaar_number"
+                : "avatar_url,verification_status"
+            }&limit=1`,
+          }),
+        )
+      : Promise.resolve([]),
+  ]);
   const stats = career?.career ?? null;
 
   const squadTeams: Array<{
@@ -71,22 +89,32 @@ export default async function PlayerDetailPage({ params, searchParams }: PagePro
     registration_status: string;
     jersey_number: number | null;
   }> = [];
-  let avatarUrl: string | null = player.photo_url;
-  let verified = false;
-  let mobileNumber = player.mobile_number;
-  let aadhaarNumber: string | null = null;
+  let avatarUrl: string | null =
+    linkedUsers[0]?.avatar_url ?? player.photo_url;
+  let verified = linkedUsers[0]?.verification_status === "verified";
+  let mobileNumber = linkedUsers[0]?.mobile_number ?? player.mobile_number;
+  let aadhaarNumber: string | null = linkedUsers[0]?.aadhaar_number ?? null;
 
-  if (isSupabaseAdminConfigured()) {
-    const memberships = await withRetry(() =>
-      adminRest<Array<{ team_id: string; jersey_number: number | null }>>(
-        "team_players",
-        {
-          query: `?player_id=eq.${encodeURIComponent(id)}&select=team_id,jersey_number&limit=10`,
-        },
-      ),
-    );
+  if (memberships.length) {
+    const teamIds = [...new Set(memberships.map((row) => row.team_id))];
+    const teams = teamIds.length
+      ? await withRetry(() =>
+          adminRest<
+            Array<{
+              id: string;
+              name: string;
+              short_name: string;
+              approved: boolean;
+              registration_status: string;
+            }>
+          >("teams", {
+            query: `?id=in.(${teamIds.join(",")})&select=id,name,short_name,approved,registration_status`,
+          }),
+        )
+      : [];
+    const teamById = new Map(teams.map((team) => [team.id, team]));
     for (const m of memberships) {
-      const t = await getTeamById(m.team_id);
+      const t = teamById.get(m.team_id);
       if (t && t.registration_status !== "rejected") {
         squadTeams.push({
           id: t.id,
@@ -97,29 +125,6 @@ export default async function PlayerDetailPage({ params, searchParams }: PagePro
           jersey_number: m.jersey_number,
         });
       }
-    }
-
-    if (player.user_id) {
-      const users = await withRetry(() =>
-        adminRest<
-          Array<{
-            avatar_url: string | null;
-            verification_status: string;
-            mobile_number: string | null;
-            aadhaar_number: string | null;
-          }>
-        >("users", {
-          query: `?id=eq.${encodeURIComponent(player.user_id!)}&select=${
-            isAdmin
-              ? "avatar_url,verification_status,mobile_number,aadhaar_number"
-              : "avatar_url,verification_status"
-          }&limit=1`,
-        }),
-      );
-      avatarUrl = users[0]?.avatar_url ?? player.photo_url;
-      verified = users[0]?.verification_status === "verified";
-      mobileNumber = users[0]?.mobile_number ?? player.mobile_number;
-      aadhaarNumber = users[0]?.aadhaar_number ?? null;
     }
   }
 
@@ -138,135 +143,159 @@ export default async function PlayerDetailPage({ params, searchParams }: PagePro
   );
 
   return (
-    <div className="mx-auto max-w-lg px-4 py-8">
-      <BackLink href={backToTeam ?? "/players"}>
-        {backToTeam ? "Back to team" : "All players"}
-      </BackLink>
-
-      <div
-        className={`mt-5 flex flex-col items-center gap-3 rounded-2xl bg-white p-6 shadow-sm ${
-          verified
-            ? "border border-[#22c55e]/25"
-            : "border border-[#3e2723]/10"
-        }`}
-      >
-        <UserAvatar
-          name={player.name}
-          src={avatarUrl}
-          size="lg"
-          className="border-2 border-[#2aa7ad]/30 shadow-sm"
-        />
-        <h1 className="text-center text-2xl font-bold leading-tight text-[#3e2723]">
-          {player.name}
-        </h1>
-        <p className="text-sm font-semibold tracking-wide text-[#1a7f84]">
-          {player.public_code}
-          {primaryJersey != null ? ` · #${primaryJersey}` : ""}
-        </p>
-        <p className="text-sm text-[#3e2723]/65">
-          {playerRoleLabel(player.role)}
-        </p>
-        {verified ? <VerifiedBadge className="mt-1" /> : null}
-      </div>
+    <div className="mx-auto max-w-lg overflow-x-hidden px-3 pb-6 pt-2 sm:px-4">
+      <article className="relative overflow-hidden rounded-[1.75rem] bg-[#3e2723] shadow-[0_18px_40px_rgba(62,39,35,0.24)]">
+        <div className="relative aspect-[4/5] min-h-[22rem]">
+          {avatarUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={avatarUrl}
+              alt=""
+              className="absolute inset-0 h-full w-full object-cover object-[center_18%]"
+            />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center bg-[#2aa7ad]/20 text-6xl font-bold text-[#f5b830]">
+              {initials(player.name)}
+            </div>
+          )}
+          <div
+            className="absolute inset-0 bg-gradient-to-t from-[#3e2723] via-[#3e2723]/30 to-transparent"
+            aria-hidden
+          />
+          <div className="absolute inset-x-0 bottom-0 px-5 pb-5 pt-20">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#f5b830]">
+              {playerRoleLabel(player.role)}
+              {primaryJersey != null ? ` · #${primaryJersey}` : ""}
+            </p>
+            <h1 className="mt-1.5 text-[1.85rem] font-bold leading-tight text-white sm:text-4xl">
+              {player.name}
+            </h1>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <span className="inline-flex items-center rounded-full bg-white/12 px-3 py-1 text-sm font-semibold tracking-wide text-white">
+                {player.public_code}
+              </span>
+              {verified ? <VerifiedBadge /> : null}
+            </div>
+          </div>
+        </div>
+      </article>
 
       {hasDetails ? (
-        <dl className="mt-4 space-y-3 rounded-2xl border border-[#3e2723]/10 bg-white p-5 shadow-sm">
+        <section className="mt-4 overflow-hidden rounded-[1.35rem] bg-white/90 shadow-[0_8px_22px_rgba(62,39,35,0.06)]">
           {isAdmin && mobileNumber ? (
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-[#3e2723]/45">
+            <div className="flex items-center justify-between gap-3 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#3e2723]/40">
                 Mobile
-              </dt>
-              <dd className="mt-1 font-medium tabular-nums text-[#3e2723]">
+              </p>
+              <p className="text-sm font-semibold tabular-nums text-[#3e2723]">
                 {mobileNumber}
-              </dd>
+              </p>
             </div>
           ) : null}
-
           {isAdmin ? (
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-[#3e2723]/45">
+            <div className="flex items-center justify-between gap-3 border-t border-[#3e2723]/6 px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-[#3e2723]/40">
                 Aadhaar
-              </dt>
-              <dd className="mt-1 font-medium tabular-nums text-[#3e2723]">
+              </p>
+              <p className="text-sm font-semibold tabular-nums text-[#3e2723]">
                 {aadhaarNumber
                   ? formatAadhaarInput(aadhaarNumber)
                   : "Not on file"}
-              </dd>
+              </p>
             </div>
           ) : null}
 
-          {player.tshirt_size ? (
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-[#3e2723]/45">
-                T-shirt size
-              </dt>
-              <dd className="mt-1 font-medium text-[#3e2723]">
-                {player.tshirt_size}
-              </dd>
-            </div>
-          ) : null}
-
-          {player.batting_style ? (
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-[#3e2723]/45">
-                Batting style
-              </dt>
-              <dd className="mt-1 font-medium text-[#3e2723]">
-                {player.batting_style}
-              </dd>
-            </div>
-          ) : null}
-
-          {player.bowling_style ? (
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-[#3e2723]/45">
-                Bowling style
-              </dt>
-              <dd className="mt-1 font-medium text-[#3e2723]">
-                {player.bowling_style}
-              </dd>
-            </div>
-          ) : null}
-
-          {lockedTeam || squadTeams.length ? (
-            <div>
-              <dt className="text-xs uppercase tracking-wide text-[#3e2723]/45">
-                Team
-              </dt>
-              <dd className="mt-1">
-                <ul className="space-y-2">
-                  {lockedTeam ? (
-                    <li>
-                      <Link
-                        href={`/teams/${lockedTeam.id}`}
-                        className="font-medium text-[#1a7f84] hover:underline"
-                      >
-                        {lockedTeam.name} ({lockedTeam.short_name})
-                      </Link>
-                    </li>
-                  ) : null}
-                  {otherSquads.map((team) => (
-                    <li key={team.id}>
-                      <Link
-                        href={`/teams/${team.id}`}
-                        className="font-medium text-[#1a7f84] hover:underline"
-                      >
-                        {team.name} ({team.short_name})
-                      </Link>
-                      <span className="ml-1.5 text-xs text-[#3e2723]/55">
-                        {teamStatusLabel(team.registration_status as never)}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </dd>
-            </div>
-          ) : null}
-        </dl>
+          <div className="divide-y divide-[#3e2723]/6">
+            {player.tshirt_size ? (
+              <div className="flex items-center gap-2.5 px-4 py-3.5">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#2aa7ad]/10 text-[#1a7f84]">
+                  <IconShirt />
+                </span>
+                <div>
+                  <p className="text-[11px] font-medium text-[#3e2723]/45">
+                    T-shirt
+                  </p>
+                  <p className="text-sm font-semibold text-[#3e2723]">
+                    {player.tshirt_size}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+            {player.batting_style ? (
+              <div className="flex items-center gap-2.5 px-4 py-3.5">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f5b830]/15 text-[#8a6500]">
+                  <IconBat />
+                </span>
+                <div>
+                  <p className="text-[11px] font-medium text-[#3e2723]/45">
+                    Batting
+                  </p>
+                  <p className="text-sm font-semibold text-[#3e2723]">
+                    {player.batting_style}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+            {player.bowling_style ? (
+              <div className="flex items-center gap-2.5 px-4 py-3.5">
+                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#f5b830]/15 text-[#8a6500]">
+                  <IconBat />
+                </span>
+                <div>
+                  <p className="text-[11px] font-medium text-[#3e2723]/45">
+                    Bowling
+                  </p>
+                  <p className="text-sm font-semibold text-[#3e2723]">
+                    {player.bowling_style}
+                  </p>
+                </div>
+              </div>
+            ) : null}
+            {lockedTeam || squadTeams.length ? (
+              <div className="flex items-start gap-2.5 px-4 py-3.5">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#2aa7ad]/10 text-[#1a7f84]">
+                  <IconTeam />
+                </span>
+                <div className="min-w-0">
+                  <p className="text-[11px] font-medium text-[#3e2723]/45">
+                    Team
+                  </p>
+                  <ul className="mt-0.5 space-y-1">
+                    {lockedTeam ? (
+                      <li>
+                        <Link
+                          href={`/teams/${lockedTeam.id}`}
+                          className="text-sm font-semibold text-[#1a7f84]"
+                        >
+                          {lockedTeam.name} ({lockedTeam.short_name})
+                        </Link>
+                      </li>
+                    ) : null}
+                    {otherSquads.map((team) => (
+                      <li key={team.id}>
+                        <Link
+                          href={`/teams/${team.id}`}
+                          className="text-sm font-semibold text-[#1a7f84]"
+                        >
+                          {team.name} ({team.short_name})
+                        </Link>
+                        <span className="ml-1.5 text-[11px] text-[#3e2723]/50">
+                          {teamStatusLabel(team.registration_status as never)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </section>
       ) : null}
 
-      <section className="mt-4 rounded-2xl border border-[#3e2723]/10 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-[#3e2723]">Career stats</h2>
+      <section className="mt-4 rounded-[1.35rem] bg-white/90 p-4 shadow-[0_8px_22px_rgba(62,39,35,0.06)] sm:p-5">
+        <h2 className="text-[15px] font-semibold text-[#3e2723] sm:text-lg">
+          Career stats
+        </h2>
         <p className="mt-1 text-xs text-[#3e2723]/50">
           All GPL editions this player has scored in
         </p>

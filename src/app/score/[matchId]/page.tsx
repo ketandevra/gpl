@@ -1,6 +1,5 @@
 import { notFound, redirect } from "next/navigation";
 import { ScorerConsole } from "@/components/scoring/ScorerConsole";
-import { BackLink } from "@/components/ui/BackLink";
 import { getCurrentUser } from "@/lib/auth/session";
 import { getScoreboard } from "@/lib/scoring/queries";
 import { LIVE_MATCH_STATUSES } from "@/lib/matches/queries";
@@ -37,9 +36,8 @@ export default async function ScoreMatchPage({ params }: PageProps) {
     LIVE_MATCH_STATUSES.includes(board.match.status) || tied;
 
   return (
-    <div className="mx-auto max-w-lg px-4 py-6 pb-24">
-      <div className="mb-4 flex items-center justify-between gap-2">
-        <BackLink href={`/matches/${matchId}`}>Match</BackLink>
+    <div className="page max-w-lg">
+      <div className="mb-4 flex items-center justify-end gap-2">
         <span className="text-xs font-bold uppercase tracking-widest text-[#3e2723]/45">
           Scorer
         </span>

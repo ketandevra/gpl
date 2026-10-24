@@ -2,6 +2,10 @@ export const APP_NAME = "Ghanchi Premier League";
 export const APP_SHORT_NAME = "GPL";
 export const LOGO_PATH = "/brand/gpl-logo.png";
 
+/** Last date/time to submit a team and entry fees (IST). */
+export const TEAM_ENTRY_DEADLINE_ISO = "2026-10-25T17:00:00+05:30";
+export const TEAM_ENTRY_DEADLINE_LABEL = "25 Oct 2026 · 5:00 PM";
+
 /** Default / fallback squad size when app_settings is unavailable. */
 export const DEFAULT_SQUAD_SIZE = 6;
 export const SQUAD_SIZE_MIN = 2;

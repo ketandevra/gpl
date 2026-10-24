@@ -160,7 +160,7 @@ export function VerificationClient() {
 
   return (
     <div className="space-y-4 rounded-2xl border border-[#3e2723]/10 bg-white p-5 shadow-sm">
-      <h2 className="text-lg font-semibold text-[#3e2723]">
+      <h2 className="hidden text-lg font-semibold text-[#3e2723] md:block">
         Register as player
       </h2>
       <p className="text-sm text-[#3e2723]/65">

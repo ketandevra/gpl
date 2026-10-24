@@ -2,12 +2,7 @@ import { TournamentsHub } from "@/components/tournaments/TournamentsHub";
 import { getCurrentUser } from "@/lib/auth/session";
 import { canAccessAdmin } from "@/lib/auth/permissions";
 import { getPendingOwnerRequestForUser } from "@/lib/teams/owner-requests";
-import {
-  getManagerName,
-  listPlayersByTeam,
-  listPublicTeams,
-  listTeamsForCaptain,
-} from "@/lib/teams/queries";
+import { listPublicTeamCards, listTeamsForCaptain } from "@/lib/teams/queries";
 import { listAllTournaments } from "@/lib/tournaments/queries";
 import { isSupabaseAdminConfigured } from "@/lib/supabase/env";
 
@@ -18,33 +13,14 @@ type PageProps = {
   searchParams: Promise<{ tab?: string; requested?: string }>;
 };
 
-async function enrichTeams(
-  teams: Awaited<ReturnType<typeof listPublicTeams>>,
-) {
-  return Promise.all(
-    teams.map(async (team) => {
-      const approved = team.registration_status === "approved";
-      const [manager_name, players] = await Promise.all([
-        getManagerName(team.manager_id),
-        approved ? listPlayersByTeam(team.id) : Promise.resolve([]),
-      ]);
-      return {
-        ...team,
-        manager_name,
-        player_count: approved ? players.length : undefined,
-      };
-    }),
-  );
-}
-
 export default async function TournamentsPage({ searchParams }: PageProps) {
   const query = await searchParams;
   const initialTab = query.tab === "past" ? "past" : "current";
 
   if (!isSupabaseAdminConfigured()) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-10">
-        <h1 className="text-2xl font-bold text-[#3e2723]">Tournaments</h1>
+      <div className="page max-w-3xl">
+        <h1 className="page-title">Tournaments</h1>
         <p className="mt-3 text-sm text-[#3e2723]/70">
           Connect Supabase to load tournaments.
         </p>
@@ -58,13 +34,8 @@ export default async function TournamentsPage({ searchParams }: PageProps) {
   ]);
   const active = tournaments.find((row) => row.is_active) ?? null;
 
-  const [teamGroups, myTeams, pendingRequest] = await Promise.all([
-    Promise.all(
-      tournaments.map(async (tournament) => ({
-        tournament,
-        teams: await enrichTeams(await listPublicTeams(tournament.id)),
-      })),
-    ),
+  const [cards, myTeams, pendingRequest] = await Promise.all([
+    listPublicTeamCards(tournaments.map((row) => row.id)),
     user && !canAccessAdmin(user)
       ? listTeamsForCaptain(user.id)
       : Promise.resolve([]),
@@ -73,23 +44,34 @@ export default async function TournamentsPage({ searchParams }: PageProps) {
       : Promise.resolve(null),
   ]);
 
-  const myCards = await Promise.all(
-    myTeams.map(async (team) => {
-      const players = await listPlayersByTeam(team.id);
-      return {
-        ...team,
-        manager_name: user?.name ?? null,
-        player_count: players.length,
-      };
-    }),
-  );
+  const cardsByTournament = new Map<string, typeof cards>();
+  for (const card of cards) {
+    const list = cardsByTournament.get(card.tournament_id) ?? [];
+    list.push(card);
+    cardsByTournament.set(card.tournament_id, list);
+  }
 
-  const current = teamGroups.filter((block) =>
-    ["ongoing", "upcoming"].includes(block.tournament.status),
-  );
-  const past = teamGroups.filter(
-    (block) => block.tournament.status === "completed",
-  );
+  const myCards = myTeams.map((team) => {
+    const match = cards.find((card) => card.id === team.id);
+    return {
+      ...team,
+      manager_name: match?.manager_name ?? user?.name ?? null,
+      player_count: match?.player_count,
+    };
+  });
+
+  const current = tournaments
+    .filter((tournament) => ["ongoing", "upcoming"].includes(tournament.status))
+    .map((tournament) => ({
+      tournament,
+      teams: cardsByTournament.get(tournament.id) ?? [],
+    }));
+  const past = tournaments
+    .filter((tournament) => tournament.status === "completed")
+    .map((tournament) => ({
+      tournament,
+      teams: cardsByTournament.get(tournament.id) ?? [],
+    }));
 
   const canRequestOwner =
     Boolean(user) &&

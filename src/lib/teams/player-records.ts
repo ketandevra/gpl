@@ -21,16 +21,18 @@ async function listIdentityPlayers(input: {
 }): Promise<PlayerRow[]> {
   if (!isSupabaseAdminConfigured()) return [];
   if (input.userId) {
+    const userId = input.userId;
     return withRetry(() =>
       adminRest<PlayerRow[]>("players", {
-        query: `?user_id=eq.${encodeURIComponent(input.userId)}&select=*&order=created_at.asc`,
+        query: `?user_id=eq.${encodeURIComponent(userId)}&select=*&order=created_at.asc`,
       }),
     );
   }
   if (input.mobile_number) {
+    const mobile = input.mobile_number;
     return withRetry(() =>
       adminRest<PlayerRow[]>("players", {
-        query: `?mobile_number=eq.${encodeURIComponent(input.mobile_number)}&select=*&order=created_at.asc`,
+        query: `?mobile_number=eq.${encodeURIComponent(mobile)}&select=*&order=created_at.asc`,
       }),
     );
   }

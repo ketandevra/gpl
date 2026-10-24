@@ -15,8 +15,8 @@ type PageProps = {
 export default async function PlayersPage({ searchParams }: PageProps) {
   if (!isSupabaseAdminConfigured()) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-10">
-        <h1 className="text-2xl font-bold text-[#3e2723]">Players</h1>
+      <div className="page max-w-3xl">
+        <h1 className="page-title hidden md:block">Players</h1>
         <p className="mt-3 text-sm text-[#3e2723]/70">
           Connect Supabase to load players.
         </p>
@@ -33,17 +33,12 @@ export default async function PlayersPage({ searchParams }: PageProps) {
   const players = await listPublicPlayers(selected?.id);
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-4 sm:py-8">
-      <h1 className="text-2xl font-bold text-[#3e2723]">Players</h1>
-      <p className="mt-1 text-sm text-[#3e2723]/60">
-        {selected
-          ? `Verified players in ${selected.name}`
-          : "Verified GPL players"}
-      </p>
+    <div className="page max-w-6xl">
+      <h1 className="page-title hidden md:block">Players</h1>
 
       {tournaments.length > 1 ? (
         <div
-          className={`mt-5 grid w-full gap-1 rounded-full bg-[#3e2723]/6 p-1 ${
+          className={`seg-track mt-4 ${
             tournaments.length === 2 ? "grid-cols-2" : "grid-cols-1 sm:grid-cols-2"
           }`}
         >
@@ -57,10 +52,8 @@ export default async function PlayersPage({ searchParams }: PageProps) {
               <Link
                 key={tournament.id}
                 href={href}
-                className={`touch-target min-w-0 rounded-full px-2 py-2.5 text-center text-sm font-semibold ${
-                  isSelected
-                    ? "bg-[#2aa7ad] text-white shadow-sm"
-                    : "text-[#3e2723]/70"
+                className={`seg-btn ${
+                  isSelected ? "seg-btn-active" : "seg-btn-idle"
                 }`}
               >
                 <span className="block truncate">

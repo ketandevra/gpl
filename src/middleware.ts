@@ -6,31 +6,22 @@ export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const token = request.cookies.get(SESSION_COOKIE_NAME)?.value;
 
-  // Protect admin shell — full role check still happens in the admin layout.
-  if (pathname.startsWith("/admin") && !token) {
+  if (
+    !token &&
+    (pathname.startsWith("/admin") ||
+      pathname.startsWith("/score") ||
+      pathname.startsWith("/verify"))
+  ) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("next", pathname);
     return NextResponse.redirect(loginUrl);
   }
-
-  if (pathname.startsWith("/score") && !token) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  if (pathname.startsWith("/verify") && !token) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("next", pathname);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  // Do not auto-bounce /login ↔ /profile here (caused confusing “nothing happens”
-  // when a stale cookie was present). Pages handle auth state themselves.
 
   return NextResponse.next();
 }
 
 export const config = {
-  matcher: ["/admin/:path*", "/score/:path*", "/verify", "/login", "/register"],
+  matcher: [
+    "/((?!_next/static|_next/image|icons/|brand/|splash/|sw.js|manifest.webmanifest|.*\\.(?:png|jpg|jpeg|webp|svg|ico|woff2)$).*)",
+  ],
 };

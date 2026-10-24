@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminTournamentsPage() {
   if (!isSupabaseAdminConfigured()) {
     return (
-      <div className="px-4 py-8 lg:px-8">
+      <div className="px-3 py-5 sm:px-4 sm:py-8 lg:px-8">
         <h1 className="text-2xl font-bold text-[#3e2723]">Tournaments</h1>
         <p className="mt-3 text-sm text-[#3e2723]/70">
           Connect Supabase to manage tournaments.

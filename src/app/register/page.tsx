@@ -25,9 +25,5 @@ async function getRegistrationOpen(): Promise<boolean> {
 export default async function RegisterPage() {
   const registrationOpen = await getRegistrationOpen();
 
-  return (
-    <div className="mx-auto max-w-md px-4 py-8 sm:py-12">
-      <AuthForm mode="register" registrationOpen={registrationOpen} />
-    </div>
-  );
+  return <AuthForm mode="register" registrationOpen={registrationOpen} />;
 }

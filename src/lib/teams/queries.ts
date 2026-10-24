@@ -139,6 +139,73 @@ export async function listPublicTeams(
   );
 }
 
+export type PublicTeamCard = TeamRow & {
+  manager_name: string | null;
+  player_count?: number;
+};
+
+/** Public teams with captain names and squad counts — no per-team roster fetches. */
+export async function listPublicTeamCards(
+  tournamentIds?: string[],
+): Promise<PublicTeamCard[]> {
+  if (!isSupabaseAdminConfigured()) return [];
+  const scope =
+    tournamentIds && tournamentIds.length
+      ? `&tournament_id=in.(${tournamentIds.join(",")})`
+      : "";
+  const teams = await withRetry(() =>
+    adminRest<TeamRow[]>("teams", {
+      query: `?registration_status=in.(pending,approved)${scope}&select=*&order=name.asc`,
+    }),
+  );
+  if (!teams.length) return [];
+
+  const managerIds = [
+    ...new Set(
+      teams
+        .map((team) => team.manager_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const approvedIds = teams
+    .filter((team) => team.registration_status === "approved")
+    .map((team) => team.id);
+
+  const [users, memberships] = await Promise.all([
+    managerIds.length
+      ? withRetry(() =>
+          adminRest<Array<{ id: string; name: string }>>("users", {
+            query: `?id=in.(${managerIds.join(",")})&select=id,name`,
+          }),
+        )
+      : Promise.resolve([]),
+    approvedIds.length
+      ? withRetry(() =>
+          adminRest<Array<{ team_id: string }>>("team_players", {
+            query: `?team_id=in.(${approvedIds.join(",")})&select=team_id`,
+          }),
+        )
+      : Promise.resolve([]),
+  ]);
+
+  const nameById = new Map(users.map((user) => [user.id, user.name]));
+  const countByTeam = new Map<string, number>();
+  for (const row of memberships) {
+    countByTeam.set(row.team_id, (countByTeam.get(row.team_id) ?? 0) + 1);
+  }
+
+  return teams.map((team) => ({
+    ...team,
+    manager_name: team.manager_id
+      ? (nameById.get(team.manager_id) ?? null)
+      : null,
+    player_count:
+      team.registration_status === "approved"
+        ? (countByTeam.get(team.id) ?? 0)
+        : undefined,
+  }));
+}
+
 export async function listAllTeams(): Promise<TeamRow[]> {
   if (!isSupabaseAdminConfigured()) return [];
   return withRetry(() =>
@@ -618,6 +685,83 @@ export async function getPlayerById(id: string): Promise<PlayerRow | null> {
     }),
   );
   return rows[0] ?? null;
+}
+
+export type ShowcasePlayer = {
+  id: string;
+  user_id: string | null;
+  name: string;
+  public_code: string;
+  role: PlayerRow["role"];
+  avatar_url: string | null;
+};
+
+/** Verified tournament players with photos — light query for the home showcase. */
+export async function listShowcasePlayers(
+  tournamentId?: string | null,
+): Promise<ShowcasePlayer[]> {
+  if (!isSupabaseAdminConfigured() || !tournamentId) return [];
+
+  const players = await withRetry(() =>
+    adminRest<
+      Array<{
+        id: string;
+        name: string;
+        public_code: string;
+        role: PlayerRow["role"];
+        user_id: string | null;
+        photo_url: string | null;
+      }>
+    >("players", {
+      query: `?tournament_id=eq.${encodeURIComponent(tournamentId)}&user_id=not.is.null&select=id,name,public_code,role,user_id,photo_url`,
+    }),
+  );
+  if (!players.length) return [];
+
+  const userIds = [
+    ...new Set(
+      players.map((p) => p.user_id).filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const users = userIds.length
+    ? await withRetry(() =>
+        adminRest<
+          Array<{
+            id: string;
+            avatar_url: string | null;
+            verification_status: string;
+            is_active: boolean;
+            role: string;
+          }>
+        >("users", {
+          query: `?id=in.(${userIds.join(",")})&select=id,avatar_url,verification_status,is_active,role`,
+        }),
+      )
+    : [];
+  const userById = new Map(users.map((u) => [u.id, u]));
+
+  return players.flatMap((player) => {
+    if (!player.user_id) return [];
+    const user = userById.get(player.user_id);
+    if (
+      !user ||
+      !user.is_active ||
+      user.verification_status !== "verified" ||
+      user.role === "admin"
+    ) {
+      return [];
+    }
+    return [
+      {
+        id: player.id,
+        user_id: player.user_id,
+        name: player.name,
+        public_code: player.public_code,
+        role: player.role,
+        avatar_url: user.avatar_url ?? player.photo_url ?? null,
+      },
+    ];
+  });
 }
 
 export async function getManagerName(

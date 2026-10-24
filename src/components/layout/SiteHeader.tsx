@@ -1,11 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useState } from "react";
 import { BrandLogo } from "@/components/brand/BrandLogo";
+import { useNavigation } from "@/components/layout/NavigationProvider";
+import { IconBack } from "@/components/ui/Icons";
 import { UserAvatar } from "@/components/ui/UserAvatar";
 import { roleLabel, type SessionUser } from "@/lib/auth/permissions";
 import { APP_NAME, NAV_ITEMS } from "@/lib/constants";
+import { getAppHeader } from "@/lib/navigation/header";
 
 type SiteHeaderProps = {
   hasLive?: boolean;
@@ -24,29 +28,89 @@ function isNavActive(href: string, pathname: string) {
 }
 
 export function SiteHeader({
-  hasLive = false,
-  user = null,
+  hasLive = true,
+  user: userProp = null,
   inviteCount = 0,
 }: SiteHeaderProps) {
-  const pathname = usePathname() ?? "/";
-  const onAdmin = pathname.startsWith("/admin");
+  const router = useRouter();
+  const { displayPath, setPendingPath } = useNavigation();
+  const searchParams = useSearchParams();
+  const [user, setUser] = useState<SessionUser | null>(userProp);
+  const onAdmin = displayPath.startsWith("/admin");
   const navItems = NAV_ITEMS.filter(
     (item) => item.href !== "/live" || hasLive,
   );
   const firstName = user?.name.trim().split(/\s+/)[0] ?? "";
   const displayName = firstName || user?.name || "Account";
+  const { title, backHref } = getAppHeader(
+    displayPath,
+    searchParams.get("from"),
+  );
+
+  useEffect(() => {
+    if (userProp) {
+      setUser(userProp);
+      return;
+    }
+    let cancelled = false;
+    void fetch("/api/auth/me", { credentials: "same-origin" })
+      .then((res) => res.json())
+      .then((data: { user?: SessionUser | null }) => {
+        if (!cancelled && data.user) setUser(data.user);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, [userProp]);
+
+  const isTabRoot =
+    displayPath === "/" ||
+    displayPath === "/tournaments" ||
+    displayPath === "/players" ||
+    displayPath === "/profile";
+
+  function handleBack() {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+      return;
+    }
+    if (backHref) {
+      setPendingPath(backHref);
+      router.push(backHref);
+    }
+  }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-[#3e2723]/10 bg-[#3e2723]/95 text-white backdrop-blur-md supports-[backdrop-filter]:bg-[#3e2723]/90">
-      <div className="flex h-14 items-center px-3 md:hidden">
-        <BrandLogo variant="mark" priority />
-        <p className="min-w-0 flex-1 px-2 text-center text-sm font-semibold leading-tight tracking-wide">
-          {APP_NAME}
-        </p>
-        <span className="pointer-events-none invisible" aria-hidden>
-          <BrandLogo variant="mark" href={null} />
-        </span>
-      </div>
+    <header
+      className={`sticky top-0 z-40 shrink-0 text-[#3e2723] md:border-b md:border-[#3e2723]/10 md:bg-[#3e2723]/95 md:text-white md:supports-[backdrop-filter]:bg-[#3e2723]/90 ${
+        isTabRoot
+          ? "bg-transparent"
+          : "border-b border-[#3e2723]/8 bg-[#fdf6e8]/95 pt-[env(safe-area-inset-top)] backdrop-blur-md"
+      }`}
+    >
+      {isTabRoot ? (
+        <div className="h-[env(safe-area-inset-top)] md:hidden" />
+      ) : (
+        <div className="flex h-12 items-center px-1 md:hidden">
+          {backHref ? (
+            <button
+              type="button"
+              onClick={handleBack}
+              className="inline-flex min-h-11 items-center gap-0.5 rounded-full px-1.5 text-[#1a7f84] active:opacity-70"
+            >
+              <IconBack />
+              <span className="text-[15px] font-semibold tracking-tight text-[#3e2723]">
+                {title}
+              </span>
+            </button>
+          ) : (
+            <h1 className="px-2.5 text-[15px] font-semibold tracking-tight">
+              {title}
+            </h1>
+          )}
+        </div>
+      )}
 
       <div className="mx-auto hidden h-16 max-w-6xl items-center justify-between gap-4 px-4 md:flex">
         <div className="flex min-w-0 items-center gap-3">
@@ -67,7 +131,7 @@ export function SiteHeader({
 
         <nav className="hidden items-center gap-0.5 lg:flex" aria-label="Main">
           {navItems.map((item) => {
-            const active = isNavActive(item.href, pathname);
+            const active = isNavActive(item.href, displayPath);
             return (
               <Link
                 key={item.href}

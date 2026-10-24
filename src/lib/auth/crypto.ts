@@ -1,11 +1,13 @@
 import { createHash, randomBytes } from "crypto";
-import { LOCKOUT_MINUTES, SESSION_TTL_DAYS } from "@/lib/auth/constants";
+import { LOCKOUT_MINUTES } from "@/lib/auth/constants";
 
 export {
   MAX_FAILED_ATTEMPTS,
   LOCKOUT_MINUTES,
   SESSION_TTL_DAYS,
   SESSION_COOKIE_NAME,
+  sessionExpiryDate,
+  sessionCookieOptions,
 } from "@/lib/auth/constants";
 
 export function generateSessionToken(): string {
@@ -19,12 +21,6 @@ export function hashToken(token: string): string {
 export function hashIp(ip: string | null): string | null {
   if (!ip) return null;
   return createHash("sha256").update(ip).digest("hex");
-}
-
-export function sessionExpiryDate(from = new Date()): Date {
-  const expires = new Date(from);
-  expires.setDate(expires.getDate() + SESSION_TTL_DAYS);
-  return expires;
 }
 
 export function lockoutUntil(from = new Date()): Date {

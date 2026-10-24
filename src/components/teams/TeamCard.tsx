@@ -19,7 +19,7 @@ export function TeamCard({
 }: TeamCardProps) {
   const content = (
     <div
-      className={`flex h-full flex-col rounded-2xl border p-4 shadow-sm transition active:scale-[0.99] sm:hover:shadow-md ${
+      className={`flex h-full flex-col rounded-2xl border p-3 shadow-sm transition active:scale-[0.99] sm:p-4 sm:hover:shadow-md ${
         highlight
           ? "border-[#2aa7ad]/40 bg-white sm:hover:border-[#2aa7ad]"
           : "border-[#3e2723]/10 bg-white sm:hover:border-[#2aa7ad]/35"
@@ -27,11 +27,11 @@ export function TeamCard({
     >
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#2aa7ad]/15 text-sm font-bold text-[#1a7f84]">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#2aa7ad]/15 text-[11px] font-bold text-[#1a7f84] sm:h-12 sm:w-12 sm:text-sm">
             {team.short_name}
           </div>
           <div className="min-w-0">
-            <h2 className="truncate font-semibold leading-tight text-[#3e2723]">
+            <h2 className="truncate text-sm font-semibold leading-tight text-[#3e2723] sm:text-base">
               {team.name}
             </h2>
             {team.manager_name ? (
@@ -56,7 +56,7 @@ export function TeamCard({
         ) : null}
       </div>
       {typeof team.player_count === "number" ? (
-        <p className="mt-3 text-sm text-[#3e2723]/60">
+        <p className="mt-2 text-xs text-[#3e2723]/60 sm:mt-3 sm:text-sm">
           {team.player_count} player{team.player_count === 1 ? "" : "s"}
         </p>
       ) : null}

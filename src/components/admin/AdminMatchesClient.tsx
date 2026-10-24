@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import type { MatchView } from "@/lib/matches/types";
 import { formatMatchWhen, matchStatusLabel } from "@/lib/matches/labels";
 import type { TeamRow } from "@/lib/teams/types";
@@ -57,6 +58,7 @@ export function AdminMatchesClient({
   const [matchType, setMatchType] = useState("league");
   const [scorerIds, setScorerIds] = useState<string[]>([]);
 
+  const [drawFor, setDrawFor] = useState<MatchView | null>(null);
   const [resultFor, setResultFor] = useState<string | null>(null);
   const [resultPick, setResultPick] = useState<"a" | "b" | "tie">("a");
   const [resultMode, setResultMode] = useState<"complete" | "super_over">(
@@ -273,7 +275,7 @@ export function AdminMatchesClient({
   }
 
   return (
-    <div className="px-4 py-8 lg:px-8">
+    <div className="px-3 py-5 sm:px-4 sm:py-8 lg:px-8">
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#2aa7ad]">
         Admin
       </p>
@@ -521,7 +523,9 @@ export function AdminMatchesClient({
                 ) : null}
               </div>
               <span className="rounded-full bg-[#3e2723]/5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#3e2723]/65">
-                {matchStatusLabel(match.status)}
+                {match.status === "completed" && !match.winner_team_id
+                  ? "Tied"
+                  : matchStatusLabel(match.status)}
               </span>
             </div>
 
@@ -574,6 +578,17 @@ export function AdminMatchesClient({
                   Complete
                 </button>
               ) : null}
+              {match.status !== "abandoned" &&
+              !(match.status === "completed" && !match.winner_team_id) ? (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setDrawFor(match)}
+                  className="rounded-full border border-[#2aa7ad]/35 bg-[#2aa7ad]/10 px-3 py-1.5 text-xs font-semibold text-[#1a7f84]"
+                >
+                  Draw / Tie
+                </button>
+              ) : null}
               {match.status === "completed" && !match.winner_team_id ? (
                 <>
                   <button
@@ -618,7 +633,7 @@ export function AdminMatchesClient({
                       ["a", match.team_a?.short_name ?? "A"],
                       ["b", match.team_b?.short_name ?? "B"],
                       ...(resultMode === "complete"
-                        ? ([["tie", "Tied"]] as const)
+                        ? ([["tie", "Draw / Tie"]] as const)
                         : []),
                     ] as const
                   ).map(([id, label]) => (
@@ -640,7 +655,7 @@ export function AdminMatchesClient({
                   {resultMode === "super_over"
                     ? "Same as international T20: Super Over decides the winner."
                     : resultPick === "tie"
-                      ? "Scores finish level. League matches share points, or start a Super Over next."
+                      ? "No winner. Both teams share tie points. You can still start a Super Over after this."
                       : "Award the match to this team."}
                 </p>
                 <div className="flex gap-2">
@@ -671,6 +686,24 @@ export function AdminMatchesClient({
 
       {matches.length === 0 ? (
         <p className="mt-6 text-sm text-[#3e2723]/60">No matches yet.</p>
+      ) : null}
+
+      {drawFor ? (
+        <ConfirmDialog
+          title="Mark as draw / tie?"
+          body={`${drawFor.team_a?.name ?? "Team A"} vs ${drawFor.team_b?.name ?? "Team B"} will finish with no winner. Both teams get tie points.`}
+          confirmLabel="Save draw"
+          busy={busy}
+          onCancel={() => setDrawFor(null)}
+          onConfirm={() => {
+            const match = drawFor;
+            setDrawFor(null);
+            void runAction(match.id, "draw", {
+              winner_team_id: null,
+              result_text: "Match tied",
+            });
+          }}
+        />
       ) : null}
     </div>
   );

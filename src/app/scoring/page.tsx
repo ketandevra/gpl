@@ -16,8 +16,8 @@ export default async function ScoringHubPage() {
   if (!user) redirect("/login?next=/scoring");
   if (!isScorer(user) && !canAccessAdmin(user)) {
     return (
-      <div className="mx-auto max-w-lg px-4 py-12 text-center">
-        <h1 className="text-2xl font-bold text-[#3e2723]">Scorers only</h1>
+      <div className="page max-w-lg text-center">
+        <h1 className="page-title hidden md:block">Scorers only</h1>
         <p className="mt-3 text-sm text-[#3e2723]/70">
           You need a scorer or admin role to open the scoring desk.
         </p>
@@ -40,8 +40,8 @@ export default async function ScoringHubPage() {
   }
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="text-2xl font-bold text-[#3e2723]">Scoring desk</h1>
+    <div className="page max-w-3xl">
+      <h1 className="page-title hidden md:block">Scoring desk</h1>
       <p className="mt-1 text-sm text-[#3e2723]/65">
         Live matches you can score.
       </p>

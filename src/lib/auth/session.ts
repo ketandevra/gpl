@@ -1,13 +1,19 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { isSupabaseAdminConfigured } from "@/lib/supabase/env";
 import { adminRest, withRetry } from "@/lib/supabase/rest";
 import type { UserRole, VerificationStatus } from "@/lib/types/database";
 import {
+  SESSION_COOKIE_NAME,
+  sessionCookieOptions,
+  sessionExpiryDate,
+} from "@/lib/auth/constants";
+
+export { sessionCookieOptions, sessionExpiryDate };
+import {
   generateSessionToken,
   hashIp,
   hashToken,
-  SESSION_COOKIE_NAME,
-  sessionExpiryDate,
 } from "@/lib/auth/crypto";
 import type { SessionUser } from "@/lib/auth/permissions";
 
@@ -26,16 +32,6 @@ type SessionRow = {
   user_id: string;
   expires_at: string;
 };
-
-export function sessionCookieOptions(expiresAt: Date) {
-  return {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "lax" as const,
-    path: "/",
-    expires: expiresAt,
-  };
-}
 
 export async function createSession(params: {
   userId: string;
@@ -96,7 +92,7 @@ export async function getSessionToken(): Promise<string | undefined> {
   return cookieStore.get(SESSION_COOKIE_NAME)?.value;
 }
 
-export async function getCurrentUser(): Promise<SessionUser | null> {
+export const getCurrentUser = cache(async function getCurrentUser(): Promise<SessionUser | null> {
   if (!isSupabaseAdminConfigured()) return null;
 
   const token = await getSessionToken();
@@ -108,7 +104,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
 
     const sessions = await withRetry(() =>
       adminRest<SessionRow[]>("sessions", {
-        query: `?token_hash=eq.${encodeURIComponent(tokenHash)}&expires_at=gt.${encodeURIComponent(nowIso)}&select=id,user_id,expires_at`,
+        query: `?token_hash=eq.${encodeURIComponent(tokenHash)}&expires_at=gt.${encodeURIComponent(nowIso)}&select=id,user_id,expires_at&limit=1`,
       }),
     );
 
@@ -117,7 +113,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
 
     const users = await withRetry(() =>
       adminRest<DbUser[]>("users", {
-        query: `?id=eq.${encodeURIComponent(session.user_id)}&select=id,name,mobile_number,role,is_active,verification_status,avatar_url`,
+        query: `?id=eq.${encodeURIComponent(session.user_id)}&select=id,name,mobile_number,role,is_active,verification_status,avatar_url&limit=1`,
       }),
     );
 
@@ -128,13 +124,6 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
       }
       return null;
     }
-
-    void adminRest("sessions", {
-      method: "PATCH",
-      query: `?id=eq.${encodeURIComponent(session.id)}`,
-      body: { last_seen_at: nowIso },
-      prefer: "return=minimal",
-    }).catch(() => undefined);
 
     return {
       id: dbUser.id,
@@ -149,7 +138,7 @@ export async function getCurrentUser(): Promise<SessionUser | null> {
     console.error("[auth] getCurrentUser failed:", err);
     return null;
   }
-}
+});
 
 export function getRequestIp(request: Request): string | null {
   const forwarded = request.headers.get("x-forwarded-for");

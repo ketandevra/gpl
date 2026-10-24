@@ -25,8 +25,8 @@ export function BrandLogo({
         width={1024}
         height={1024}
         priority={priority}
-        className={`h-auto w-full max-w-[148px] object-contain sm:max-w-[176px] ${className}`}
-        sizes="(max-width: 640px) 148px, 176px"
+        className={`h-auto w-full max-w-[112px] object-contain sm:max-w-[176px] ${className}`}
+        sizes="(max-width: 640px) 112px, 176px"
       />
     ) : (
       <Image
@@ -35,8 +35,8 @@ export function BrandLogo({
         width={96}
         height={96}
         priority={priority}
-        className={`h-10 w-10 rounded-full object-cover sm:h-11 sm:w-11 ${className}`}
-        sizes="44px"
+        className={`h-8 w-8 rounded-full object-cover sm:h-11 sm:w-11 ${className}`}
+        sizes="40px"
       />
     );
 

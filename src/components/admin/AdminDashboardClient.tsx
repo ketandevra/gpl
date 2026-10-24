@@ -77,7 +77,7 @@ export function AdminDashboardClient({
 
   if (!configured) {
     return (
-      <div className="px-4 py-8 lg:px-8">
+      <div className="px-3 py-5 sm:px-4 sm:py-8 lg:px-8">
         <h1 className="text-2xl font-bold text-[#3e2723]">Admin dashboard</h1>
         <p className="mt-3 rounded-xl border border-[#f5b830]/40 bg-[#fff6df] px-4 py-3 text-sm text-[#3e2723]">
           Connect Supabase in <code>.env.local</code> (including{" "}
@@ -99,7 +99,7 @@ export function AdminDashboardClient({
   ];
 
   return (
-    <div className="px-4 py-8 lg:px-8">
+    <div className="px-3 py-5 sm:px-4 sm:py-8 lg:px-8">
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#2aa7ad]">
         Admin
       </p>

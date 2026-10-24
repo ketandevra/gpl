@@ -12,6 +12,7 @@
   --gpl-cream-deep: #f3e6cf;
   --background: var(--gpl-cream);
   --foreground: var(--gpl-brown);
+  --app-tabbar: 3rem;
 }
 
 @theme inline {
@@ -26,9 +27,46 @@
   --font-mono: var(--font-geist-mono);
 }
 
+html {
+  background: var(--gpl-cream);
+}
+
 html,
 body {
-  touch-action: pan-x pan-y;
+  height: 100%;
+  height: 100dvh;
+  height: var(--app-height, 100dvh);
+  max-height: var(--app-height, 100dvh);
+  overflow: hidden;
+  overscroll-behavior-x: none;
+  touch-action: pan-y;
+}
+
+@supports (-webkit-touch-callout: none) {
+  html {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  body {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+    height: auto;
+    min-height: 0;
+    max-height: none;
+  }
+}
+
+@media (display-mode: standalone) {
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+}
+
+.app-tabbar {
+  padding-bottom: 0;
 }
 
 body {
@@ -39,7 +77,6 @@ body {
   color: var(--foreground);
   font-family: var(--font-display), ui-sans-serif, system-ui, sans-serif;
   -webkit-tap-highlight-color: transparent;
-  overflow-x: hidden;
 }
 
 ::selection {
@@ -88,10 +125,216 @@ body {
   min-width: 10rem;
 }
 
-/* Comfortable touch targets on mobile */
+.page {
+  margin-inline: auto;
+  padding: 0.75rem 0.75rem 0.5rem;
+}
+
+.page-title {
+  font-size: 1.2rem;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+  color: var(--gpl-brown);
+}
+
+.page-lead {
+  margin-top: 0.2rem;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+  color: color-mix(in oklab, var(--gpl-brown) 60%, transparent);
+}
+
+.seg-track {
+  display: grid;
+  width: 100%;
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--gpl-brown) 6%, transparent);
+  padding: 3px;
+}
+
+.seg-btn {
+  min-width: 0;
+  min-height: 2.25rem;
+  border-radius: 9999px;
+  padding: 0.45rem 0.5rem;
+  text-align: center;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.seg-btn-active {
+  background: var(--gpl-teal);
+  color: white;
+  box-shadow: 0 1px 2px rgb(62 39 35 / 0.08);
+}
+
+.seg-btn-idle {
+  color: color-mix(in oklab, var(--gpl-brown) 70%, transparent);
+}
+
+@keyframes gpl-intro-photo {
+  from {
+    opacity: 0;
+    transform: scale(1.08);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes gpl-intro-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes gpl-intro-bar {
+  from {
+    width: 0%;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+.gpl-intro-photo {
+  animation: gpl-intro-photo 0.9s ease-out both;
+}
+
+.gpl-intro-kicker {
+  animation: gpl-intro-up 0.55s ease-out 0.18s both;
+}
+
+.gpl-intro-name {
+  animation: gpl-intro-up 0.6s ease-out 0.32s both;
+}
+
+.gpl-intro-meta {
+  animation: gpl-intro-up 0.55s ease-out 0.46s both;
+}
+
+.gpl-intro-bar {
+  animation: gpl-intro-bar 4.2s linear both;
+}
+
+@keyframes gpl-count-flip {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.92);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes gpl-count-live {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.75);
+  }
+}
+
+@keyframes gpl-count-glow {
+  0%,
+  100% {
+    opacity: 0.28;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes gpl-count-ring {
+  0% {
+    box-shadow: 0 0 0 0 rgb(245 184 48 / 0.45);
+  }
+  70% {
+    box-shadow: 0 0 0 8px rgb(245 184 48 / 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgb(245 184 48 / 0);
+  }
+}
+
+.gpl-count-flip {
+  animation: gpl-count-flip 0.38s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.gpl-count-live {
+  animation: gpl-count-live 1.1s ease-in-out infinite;
+}
+
+.gpl-count-glow {
+  animation: gpl-count-glow 2.8s ease-in-out infinite;
+}
+
+.gpl-count-ring {
+  animation: gpl-count-ring 1s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gpl-intro-photo,
+  .gpl-intro-kicker,
+  .gpl-intro-name,
+  .gpl-intro-meta,
+  .gpl-intro-bar,
+  .gpl-count-flip,
+  .gpl-count-live,
+  .gpl-count-glow,
+  .gpl-count-ring {
+    animation: none;
+  }
+}
+
+@media (min-width: 640px) {
+  .page {
+    padding: 2rem 1rem;
+  }
+
+  .page-title {
+    font-size: 1.5rem;
+  }
+
+  .page-lead {
+    font-size: 0.875rem;
+  }
+}
+
+/* Compact phone chrome — Outfit reads large at default 16px */
 @media (max-width: 767px) {
-  button,
-  a[role="button"],
+  html {
+    font-size: 15px;
+  }
+
+  h1.text-2xl,
+  h1.text-xl {
+    font-size: 1.2rem;
+    line-height: 1.25;
+    letter-spacing: -0.025em;
+  }
+
+  h2.text-lg,
+  h2.text-xl {
+    font-size: 1.05rem;
+    line-height: 1.3;
+  }
+
   .touch-target {
     min-height: 44px;
   }

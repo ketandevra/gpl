@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getCurrentUser } from "@/lib/auth/session";
 import { ProfileClient } from "@/components/auth/ProfileClient";
+import { IconLogin } from "@/components/ui/Icons";
 import { listTeamsForCaptain } from "@/lib/teams/queries";
 import { listPendingInvitesForUser } from "@/lib/teams/invites";
 import { adminRest, withRetry } from "@/lib/supabase/rest";
@@ -17,15 +18,16 @@ export default async function ProfilePage() {
 
   if (!user) {
     return (
-      <div className="mx-auto max-w-lg px-4 py-10 text-center">
-        <h1 className="text-2xl font-bold text-[#3e2723]">Profile</h1>
-        <p className="mt-3 text-sm text-[#3e2723]/70">
+      <div className="page max-w-lg text-center">
+        <h1 className="page-title hidden md:block">Profile</h1>
+        <p className="mt-2 text-sm text-[#3e2723]/70">
           Sign in to view your account.
         </p>
         <Link
           href="/login?next=/profile"
-          className="mt-6 inline-flex touch-target items-center justify-center rounded-full bg-[#2aa7ad] px-5 py-3 text-sm font-semibold text-white"
+          className="mt-6 inline-flex touch-target items-center justify-center gap-2 rounded-full bg-[#2aa7ad] px-5 py-3 text-sm font-semibold text-white"
         >
+          <IconLogin className="h-4 w-4" />
           Login
         </Link>
       </div>

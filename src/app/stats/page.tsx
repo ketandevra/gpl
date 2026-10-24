@@ -13,8 +13,8 @@ export const dynamic = "force-dynamic";
 export default async function StatsPage() {
   if (!isSupabaseAdminConfigured()) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-10">
-        <h1 className="text-2xl font-bold text-[#3e2723]">Statistics</h1>
+      <div className="page max-w-3xl">
+        <h1 className="page-title hidden md:block">Statistics</h1>
         <p className="mt-3 text-sm text-[#3e2723]/70">
           Connect Supabase to load the points table and leaderboards.
         </p>

@@ -17,7 +17,7 @@ export function MatchCard({ match }: MatchCardProps) {
   return (
     <Link
       href={`/matches/${match.id}`}
-      className="block rounded-2xl border border-[#3e2723]/10 bg-white p-4 shadow-sm transition active:scale-[0.99] sm:hover:border-[#2aa7ad]/35 sm:hover:shadow-md"
+      className="block rounded-2xl border border-[#3e2723]/10 bg-white p-3 shadow-sm transition active:scale-[0.99] sm:p-4 sm:hover:border-[#2aa7ad]/35 sm:hover:shadow-md"
     >
       <div className="flex items-center justify-between gap-2">
         <span
@@ -49,7 +49,7 @@ export function MatchCard({ match }: MatchCardProps) {
         </p>
       ) : null}
 
-      <p className="mt-3 text-lg font-semibold text-[#3e2723]">
+      <p className="mt-2 text-[15px] font-semibold leading-snug text-[#3e2723] sm:mt-3 sm:text-lg">
         {match.team_a?.name ?? "Team A"}{" "}
         <span className="font-normal text-[#3e2723]/40">vs</span>{" "}
         {match.team_b?.name ?? "Team B"}

@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 type UserAvatarProps = {
   name: string;
   src?: string | null;
-  size?: "sm" | "md" | "card" | "lg";
+  size?: "sm" | "md" | "card" | "lg" | "xl" | "fill";
   /** Circle (nav) or rounded square (profile preview so the full photo shows). */
   shape?: "circle" | "rounded";
   /** `contain` shows the full photo; `cover` fills the frame. */
@@ -20,8 +20,10 @@ type UserAvatarProps = {
 const SIZE_CLASS = {
   sm: "h-9 w-9 text-[11px]",
   md: "h-12 w-12 text-sm",
-  card: "h-16 w-16 text-sm",
-  lg: "h-36 w-36 text-2xl sm:h-40 sm:w-40",
+  card: "h-12 w-12 text-xs sm:h-16 sm:w-16 sm:text-sm",
+  fill: "absolute inset-0 h-full w-full text-4xl",
+  lg: "h-24 w-24 text-lg sm:h-40 sm:w-40 sm:text-2xl",
+  xl: "h-40 w-40 text-3xl sm:h-52 sm:w-52 sm:text-4xl",
 } as const;
 
 export function UserAvatar({
@@ -50,7 +52,7 @@ export function UserAvatar({
 
   return (
     <span
-      className={`relative inline-flex shrink-0 items-center justify-center overflow-hidden leading-none ${radius} ${SIZE_CLASS[size]} ${className}`}
+      className={`relative flex shrink-0 items-center justify-center overflow-hidden leading-none ${radius} ${SIZE_CLASS[size]} ${className}`}
       style={{ backgroundColor }}
       aria-hidden={showPhoto ? true : undefined}
     >
@@ -62,13 +64,18 @@ export function UserAvatar({
           decoding="async"
           crossOrigin={crossOrigin}
           onError={() => setFailed(true)}
-          className={`pointer-events-none absolute inset-0 block max-h-none max-w-none object-[center_18%] ${
+          className={`pointer-events-none absolute inset-0 block h-full w-full max-h-none max-w-none ${
             fit === "cover" ? "object-cover" : "object-contain"
+          } ${
+            size === "lg" || size === "xl" || shape === "rounded"
+              ? "object-[center_18%]"
+              : "object-center"
           }`}
-          style={{ width: "100%", height: "100%" }}
         />
       ) : (
-        <span className="font-bold tracking-wide text-[#1a7f84]">{initials}</span>
+        <span className="font-bold leading-none tracking-wide text-[#1a7f84]">
+          {initials}
+        </span>
       )}
     </span>
   );

@@ -12,8 +12,8 @@ export const dynamic = "force-dynamic";
 export default async function MatchesPage() {
   if (!isSupabaseAdminConfigured()) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-10">
-        <h1 className="text-2xl font-bold text-[#3e2723]">Matches</h1>
+      <div className="page max-w-3xl">
+        <h1 className="page-title hidden md:block">Matches</h1>
         <p className="mt-3 text-sm text-[#3e2723]/70">
           Connect Supabase to load fixtures.
         </p>
@@ -44,9 +44,9 @@ export default async function MatchesPage() {
     );
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <h1 className="text-2xl font-bold text-[#3e2723]">Matches</h1>
-      <p className="mt-1 text-sm text-[#3e2723]/60">
+    <div className="page max-w-3xl">
+      <h1 className="page-title hidden md:block">Matches</h1>
+      <p className="page-lead">
         Fixtures and results by tournament
       </p>
 
@@ -56,8 +56,8 @@ export default async function MatchesPage() {
         </p>
       ) : (
         groups.map(({ tournament, live, upcoming, completed }) => (
-          <section key={tournament.id} className="mt-8">
-            <h2 className="text-lg font-bold text-[#3e2723]">
+          <section key={tournament.id} className="mt-6 sm:mt-8">
+            <h2 className="text-[15px] font-bold text-[#3e2723] sm:text-lg">
               {tournament.name}
             </h2>
             <p className="mt-0.5 text-xs font-semibold uppercase tracking-wide text-[#1a7f84]">

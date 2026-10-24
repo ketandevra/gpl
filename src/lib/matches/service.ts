@@ -248,6 +248,14 @@ export async function applyMatchAction(
         patch.result_text = "Match tied";
       }
       break;
+    case "draw":
+      if (existing.status === "abandoned") {
+        return { error: "An abandoned match cannot be marked as a draw.", status: 400 };
+      }
+      nextStatus = "completed";
+      patch.winner_team_id = null;
+      patch.result_text = input.result_text?.trim() || "Match tied";
+      break;
     case "super_over": {
       const tied =
         existing.status === "completed" && !existing.winner_team_id;

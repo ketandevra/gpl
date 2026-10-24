@@ -56,17 +56,15 @@ export function TournamentsHub({
   const blocks = tab === "past" ? past : current;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-4 sm:py-6">
+    <div className="page max-w-6xl">
       <h1 className="sr-only">Tournaments</h1>
 
-      <div className="grid w-full grid-cols-2 rounded-full bg-[#3e2723]/6 p-1">
+      <div className="seg-track grid-cols-2">
         <button
           type="button"
           onClick={() => selectTab("current")}
-          className={`touch-target min-w-0 rounded-full px-2 py-2.5 text-center text-sm font-semibold ${
-            tab === "current"
-              ? "bg-[#2aa7ad] text-white shadow-sm"
-              : "text-[#3e2723]/70"
+          className={`seg-btn ${
+            tab === "current" ? "seg-btn-active" : "seg-btn-idle"
           }`}
         >
           Upcoming / Ongoing
@@ -74,10 +72,8 @@ export function TournamentsHub({
         <button
           type="button"
           onClick={() => selectTab("past")}
-          className={`touch-target min-w-0 rounded-full px-2 py-2.5 text-center text-sm font-semibold ${
-            tab === "past"
-              ? "bg-[#2aa7ad] text-white shadow-sm"
-              : "text-[#3e2723]/70"
+          className={`seg-btn ${
+            tab === "past" ? "seg-btn-active" : "seg-btn-idle"
           }`}
         >
           Past
@@ -118,7 +114,7 @@ export function TournamentsHub({
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#2aa7ad]">
             Captain
           </p>
-          <h2 className="mt-1 text-lg font-bold text-[#3e2723]">
+          <h2 className="mt-1 text-[15px] font-bold text-[#3e2723] sm:text-lg">
             {myTeams.length === 1 ? "Your team" : "Your teams"}
           </h2>
           <div className="mt-4 grid items-stretch gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -150,7 +146,7 @@ export function TournamentsHub({
           </p>
         </div>
       ) : (
-        <div className="mt-8 space-y-10">
+        <div className="mt-6 space-y-7 sm:mt-8 sm:space-y-10">
           {blocks.map(({ tournament, teams }) => {
             const dates = formatTournamentDates(
               tournament.start_date,
@@ -166,7 +162,7 @@ export function TournamentsHub({
               <section key={tournament.id}>
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
-                    <h2 className="text-lg font-bold text-[#3e2723]">
+                    <h2 className="text-[15px] font-bold text-[#3e2723] sm:text-lg">
                       {tournament.name}
                       {tournament.short_name ? (
                         <span className="ml-1.5 font-medium text-[#3e2723]/45">

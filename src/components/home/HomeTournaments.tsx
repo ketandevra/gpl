@@ -15,7 +15,7 @@ export function HomeTournaments({ tournaments }: Props) {
   return (
     <section className="mt-5 sm:mt-8">
       <div className="mb-3 flex items-end justify-between gap-2">
-        <h2 className="text-lg font-semibold text-[#3e2723]">Tournaments</h2>
+        <h2 className="text-[15px] font-semibold text-[#3e2723] sm:text-lg">Tournaments</h2>
         <Link
           href="/tournaments"
           className="text-sm font-semibold text-[#1a7f84] hover:underline"
@@ -39,10 +39,10 @@ export function HomeTournaments({ tournaments }: Props) {
             <li key={t.id}>
               <Link
                 href={href}
-                className="group flex h-full flex-col rounded-2xl border border-[#3e2723]/8 bg-white/85 p-4 shadow-sm transition active:scale-[0.99] sm:p-5 sm:hover:-translate-y-0.5 sm:hover:border-[#2aa7ad]/35 sm:hover:shadow-md"
+                className="group flex h-full flex-col rounded-2xl border border-[#3e2723]/8 bg-white/85 p-3 shadow-sm transition active:scale-[0.99] sm:p-5 sm:hover:-translate-y-0.5 sm:hover:border-[#2aa7ad]/35 sm:hover:shadow-md"
               >
                 <div className="flex flex-wrap items-start justify-between gap-2">
-                  <h3 className="font-semibold text-[#3e2723] group-hover:text-[#1a7f84]">
+                  <h3 className="text-sm font-semibold text-[#3e2723] group-hover:text-[#1a7f84] sm:text-base">
                     {t.name}
                     {t.short_name ? (
                       <span className="ml-1.5 font-medium text-[#3e2723]/45">

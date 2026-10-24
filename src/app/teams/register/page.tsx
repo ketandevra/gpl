@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation";
-import { BackLink } from "@/components/ui/BackLink";
 import { RegisterTeamForm } from "@/components/teams/RegisterTeamForm";
 import { getCurrentUser } from "@/lib/auth/session";
 import { canAccessAdmin } from "@/lib/auth/permissions";
@@ -24,9 +23,8 @@ export default async function RegisterTeamPage() {
     const pending = await getPendingOwnerRequestForUser(user.id, tournament.id);
     if (pending) {
       return (
-        <div className="mx-auto max-w-lg px-4 py-10">
-          <BackLink href="/tournaments">Back to tournaments</BackLink>
-          <h1 className="mt-5 text-2xl font-bold text-[#3e2723]">
+        <div className="page max-w-lg">
+          <h1 className="page-title">
             Request pending
           </h1>
           <p className="mt-3 text-sm text-[#3e2723]/70">
@@ -39,9 +37,8 @@ export default async function RegisterTeamPage() {
   }
 
   return (
-    <div className="mx-auto max-w-lg px-4 py-10">
-      <BackLink href="/tournaments">Back to tournaments</BackLink>
-      <h1 className="mt-5 text-2xl font-bold text-[#3e2723]">
+    <div className="page max-w-lg">
+      <h1 className="page-title">
         Become a team owner
       </h1>
       <p className="mt-3 text-sm text-[#3e2723]/70">

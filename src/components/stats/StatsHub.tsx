@@ -31,14 +31,14 @@ function Photo({ src, name }: { src: string | null; name: string }) {
       <img
         src={src}
         alt=""
-        className="h-11 w-11 rounded-full object-cover ring-1 ring-[#3e2723]/10"
+        className="h-9 w-9 rounded-full object-cover ring-1 ring-[#3e2723]/10 sm:h-11 sm:w-11"
       />
     );
   }
   return (
     <div
       aria-hidden
-      className="flex h-11 w-11 items-center justify-center rounded-full bg-[#efe4cf] text-sm font-bold text-[#3e2723]/55"
+      className="flex h-9 w-9 items-center justify-center rounded-full bg-[#efe4cf] text-xs font-bold text-[#3e2723]/55 sm:h-11 sm:w-11 sm:text-sm"
     >
       {name.slice(0, 1).toUpperCase()}
     </div>
@@ -47,7 +47,7 @@ function Photo({ src, name }: { src: string | null; name: string }) {
 
 function Rank({ n }: { n: number }) {
   return (
-    <span className="w-8 shrink-0 text-right text-lg font-bold tabular-nums text-[#3e2723]/25">
+    <span className="w-6 shrink-0 text-right text-sm font-bold tabular-nums text-[#3e2723]/25 sm:w-8 sm:text-lg">
       {String(n).padStart(2, "0")}
     </span>
   );
@@ -139,16 +139,16 @@ export function StatsHub({
   );
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8 pb-24">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#2aa7ad]">
+    <div className="page max-w-3xl">
+      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2aa7ad]">
         {tournamentName ?? "Tournament"}
       </p>
-      <h1 className="mt-2 text-2xl font-bold text-[#3e2723]">Statistics</h1>
-      <p className="mt-1 text-sm text-[#3e2723]/65">
+      <h1 className="page-title mt-1 hidden md:block">Statistics</h1>
+      <p className="page-lead">
         Points table and player leaderboards from scored matches.
       </p>
 
-      <div className="mt-6 flex gap-1 rounded-full bg-[#efe4cf] p-1">
+      <div className="seg-track mt-4 grid-cols-2 sm:mt-6">
         {(
           [
             ["points", "Points table"],
@@ -159,8 +159,8 @@ export function StatsHub({
             key={id}
             type="button"
             onClick={() => setTab(id)}
-            className={`flex-1 rounded-full px-3 py-2 text-sm font-semibold ${
-              tab === id ? "bg-white text-[#1a7f84] shadow-sm" : "text-[#3e2723]/65"
+            className={`seg-btn ${
+              tab === id ? "bg-white text-[#1a7f84] shadow-sm" : "seg-btn-idle"
             }`}
           >
             {label}
@@ -251,7 +251,7 @@ export function StatsHub({
                     <div className="flex items-start gap-3">
                       <Photo src={row.photo_url} name={row.player_name} />
                       <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-[#3e2723]">
+                        <p className="text-sm font-semibold text-[#3e2723] sm:text-base">
                           {row.player_name}{" "}
                           <span className="font-normal text-[#3e2723]/50">
                             ({row.team_name})
@@ -302,7 +302,7 @@ export function StatsHub({
                     <div className="flex items-start gap-3">
                       <Photo src={row.photo_url} name={row.player_name} />
                       <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-[#3e2723]">
+                        <p className="text-sm font-semibold text-[#3e2723] sm:text-base">
                           {row.player_name}{" "}
                           <span className="font-normal text-[#3e2723]/50">
                             ({row.team_name})
@@ -351,7 +351,7 @@ export function StatsHub({
                     <div className="flex items-start gap-3">
                       <Photo src={row.photo_url} name={row.player_name} />
                       <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-[#3e2723]">
+                        <p className="text-sm font-semibold text-[#3e2723] sm:text-base">
                           {row.player_name}{" "}
                           <span className="font-normal text-[#3e2723]/50">
                             ({row.team_name})
@@ -393,13 +393,13 @@ export function StatsHub({
                         <Photo src={row.photo_url} name={row.player_name} />
                         <div className="min-w-0 flex-1">
                           <div className="flex items-baseline justify-between gap-3">
-                            <p className="font-semibold text-[#3e2723]">
+                            <p className="text-sm font-semibold text-[#3e2723] sm:text-base">
                               {row.player_name}
                               <span className="ml-1 font-normal text-[#3e2723]/50">
                                 {row.team_name}
                               </span>
                             </p>
-                            <p className="text-lg font-bold tabular-nums text-[#3e2723]">
+                            <p className="text-base font-bold tabular-nums text-[#3e2723] sm:text-lg">
                               {row.total.toFixed(4)}
                             </p>
                           </div>

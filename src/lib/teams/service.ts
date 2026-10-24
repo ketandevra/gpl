@@ -642,10 +642,11 @@ export async function createTournamentPlayer(
     const public_code = await publicCodeForIdentity({
       mobile_number: input.mobile_number ?? null,
     });
-    const linked = input.mobile_number
+    const mobile = input.mobile_number ?? null;
+    const linked = mobile
       ? await withRetry(() =>
           adminRest<Array<{ id: string }>>("users", {
-            query: `?mobile_number=eq.${encodeURIComponent(input.mobile_number)}&select=id&limit=1`,
+            query: `?mobile_number=eq.${encodeURIComponent(mobile)}&select=id&limit=1`,
           }),
         )
       : [];

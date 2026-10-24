@@ -1,7 +1,6 @@
 import { notFound } from "next/navigation";
 import { PlayerCard } from "@/components/teams/PlayerCard";
 import { ManageSquadClient } from "@/components/teams/ManageSquadClient";
-import { BackLink } from "@/components/ui/BackLink";
 import { getCurrentUser } from "@/lib/auth/session";
 import { canAccessAdmin } from "@/lib/auth/permissions";
 import { getSquadSize } from "@/lib/settings/app";
@@ -53,25 +52,23 @@ export default async function TeamDetailPage({
   const captainCanEditSquad = canEdit && !team.approved;
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8">
-      <BackLink href="/tournaments">All tournaments</BackLink>
-
+    <div className="page max-w-3xl">
       {query.created ? (
-        <p className="mt-4 rounded-xl border border-[#2aa7ad]/25 bg-[#2aa7ad]/10 px-4 py-3 text-sm text-[#1a7f84]">
+        <p className="rounded-xl border border-[#2aa7ad]/25 bg-[#2aa7ad]/10 px-4 py-3 text-sm text-[#1a7f84]">
           Team created. Captain can invite squad members; a player joins only
           after they accept. Admin will approve when the squad is complete.
         </p>
       ) : null}
 
-      <div className="mt-5 flex items-center gap-4">
-        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[#2aa7ad]/15 text-lg font-bold text-[#1a7f84]">
+      <div className="mt-4 flex items-center gap-3 sm:mt-5 sm:gap-4">
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#2aa7ad]/15 text-sm font-bold text-[#1a7f84] sm:h-16 sm:w-16 sm:text-lg">
           {team.short_name}
         </div>
         <div className="min-w-0">
-          <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#2aa7ad]">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-[#2aa7ad]">
             {teamStatusLabel(team.registration_status)}
           </p>
-          <h1 className="mt-1 text-2xl font-bold leading-tight text-[#3e2723]">
+          <h1 className="page-title mt-0.5">
             {team.name}
           </h1>
           {captain_name ? (
@@ -84,9 +81,9 @@ export default async function TeamDetailPage({
       </div>
 
       {canViewSquad ? (
-      <section className="mt-8">
+      <section className="mt-6 sm:mt-8">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-lg font-semibold text-[#3e2723]">Squad</h2>
+          <h2 className="text-[15px] font-semibold text-[#3e2723] sm:text-lg">Squad</h2>
           <span className="text-sm text-[#3e2723]/50">
             {players.length} / {squadSize} player
             {players.length === 1 ? "" : "s"}
@@ -129,8 +126,8 @@ export default async function TeamDetailPage({
         )}
       </section>
       ) : (
-        <section className="mt-8 rounded-2xl border border-[#f5b830]/35 bg-[#fff6df] px-5 py-6">
-          <h2 className="text-lg font-semibold text-[#3e2723]">Squad</h2>
+        <section className="mt-6 rounded-2xl border border-[#f5b830]/35 bg-[#fff6df] px-4 py-4 sm:mt-8 sm:px-5 sm:py-6">
+          <h2 className="text-[15px] font-semibold text-[#3e2723] sm:text-lg">Squad</h2>
           <p className="mt-2 text-sm text-[#3e2723]/70">
             Squad and other team details will be shown after admin approves
             this team.

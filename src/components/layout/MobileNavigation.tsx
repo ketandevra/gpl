@@ -1,14 +1,16 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useNavigation } from "@/components/layout/NavigationProvider";
 import { MOBILE_NAV_ITEMS } from "@/lib/constants";
 
 function NavIcon({ name, active }: { name: string; active: boolean }) {
   const stroke = active ? "#1a7f84" : "#7a6a5c";
   const common = {
-    width: 22,
-    height: 22,
+    width: 20,
+    height: 20,
     viewBox: "0 0 24 24",
     fill: "none",
     stroke,
@@ -58,33 +60,41 @@ function NavIcon({ name, active }: { name: string; active: boolean }) {
 }
 
 export function MobileNavigation() {
-  const pathname = usePathname();
-  if (pathname.startsWith("/admin")) return null;
+  const router = useRouter();
+  const { displayPath, setPendingPath } = useNavigation();
+  useEffect(() => {
+    for (const item of MOBILE_NAV_ITEMS) {
+      router.prefetch(item.href);
+    }
+  }, [router]);
+  if (displayPath.startsWith("/admin")) return null;
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-40 border-t border-[#3e2723]/10 bg-[#fdf6e8]/95 pb-[env(safe-area-inset-bottom)] shadow-[0_-4px_20px_rgba(62,39,35,0.08)] backdrop-blur-md md:hidden"
+      className="app-tabbar z-40 shrink-0 border-t border-[#3e2723]/10 bg-[#fdf6e8] md:hidden"
       aria-label="Mobile"
     >
-      <ul className="mx-auto grid max-w-lg grid-cols-4 gap-0.5 px-1 pt-1.5 pb-1">
+      <ul className="mx-auto grid max-w-lg grid-cols-4 px-1">
         {MOBILE_NAV_ITEMS.map((item) => {
           const active =
             item.href === "/"
-              ? pathname === "/"
+              ? displayPath === "/"
               : item.href === "/profile"
-                ? pathname.startsWith("/profile") ||
-                  pathname.startsWith("/login") ||
-                  pathname.startsWith("/register")
+                ? displayPath.startsWith("/profile") ||
+                  displayPath.startsWith("/login") ||
+                  displayPath.startsWith("/register")
                 : item.href === "/tournaments"
-                  ? pathname.startsWith("/tournaments") ||
-                    pathname.startsWith("/teams")
-                  : pathname.startsWith(item.href);
+                  ? displayPath.startsWith("/tournaments") ||
+                    displayPath.startsWith("/teams")
+                  : displayPath.startsWith(item.href);
 
           return (
             <li key={item.href}>
               <Link
                 href={item.href}
-                className={`relative flex min-h-[52px] flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-1.5 text-[10px] font-semibold tracking-wide transition active:scale-[0.97] ${
+                prefetch
+                onClick={() => setPendingPath(item.href)}
+                className={`relative flex h-12 flex-col items-center justify-center gap-0.5 px-1 text-[10px] font-semibold tracking-wide transition active:scale-[0.97] ${
                   active
                     ? "bg-[#2aa7ad]/12 text-[#1a7f84]"
                     : "text-[#7a6a5c] hover:text-[#3e2723]"

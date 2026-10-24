@@ -52,6 +52,7 @@ export const matchActionSchema = z.object({
     "innings_break",
     "resume",
     "complete",
+    "draw",
     "abandon",
     "super_over",
     "start_super_over",

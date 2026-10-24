@@ -15,9 +15,5 @@ export default async function LoginPage({ searchParams }: PageProps) {
       ? "/"
       : rawNext;
 
-  return (
-    <div className="mx-auto max-w-md px-4 py-8 sm:py-12">
-      <AuthForm mode="login" nextPath={nextPath} />
-    </div>
-  );
+  return <AuthForm mode="login" nextPath={nextPath} />;
 }

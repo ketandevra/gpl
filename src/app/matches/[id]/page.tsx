@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LiveMatchPanel } from "@/components/matches/LiveMatchPanel";
-import { BackLink } from "@/components/ui/BackLink";
 import {
   formatMatchWhen,
   getMatchById,
@@ -30,8 +29,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
 
   if (!isSupabaseAdminConfigured()) {
     return (
-      <div className="mx-auto max-w-3xl px-4 py-10">
-        <h1 className="text-2xl font-bold text-[#3e2723]">Match</h1>
+      <div className="page max-w-3xl">
+        <h1 className="page-title">Match</h1>
         <p className="mt-3 text-sm text-[#3e2723]/70">
           Connect Supabase to load match details.
         </p>
@@ -50,14 +49,11 @@ export default async function MatchDetailPage({ params }: PageProps) {
   ]);
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-6 pb-20">
-      <div className="flex items-center justify-between gap-3">
-        <BackLink href={isLive ? "/live" : "/matches"}>
-          {isLive ? "Live" : "Matches"}
-        </BackLink>
-        {showScoreLink &&
-        (isLive ||
-          (match.status === "completed" && !match.winner_team_id)) ? (
+    <div className="page max-w-3xl">
+      {showScoreLink &&
+      (isLive ||
+        (match.status === "completed" && !match.winner_team_id)) ? (
+        <div className="flex justify-end">
           <Link
             href={`/score/${match.id}`}
             className="rounded-full bg-[#d81b60] px-4 py-2 text-xs font-bold text-white"
@@ -66,8 +62,8 @@ export default async function MatchDetailPage({ params }: PageProps) {
               ? "Super Over"
               : "Score"}
           </Link>
-        ) : null}
-      </div>
+        </div>
+      ) : null}
 
       <div className="mt-4 flex flex-wrap items-center gap-2">
         {isLive ? (
@@ -94,7 +90,7 @@ export default async function MatchDetailPage({ params }: PageProps) {
         </span>
       </div>
 
-      <h1 className="mt-3 text-xl font-bold leading-snug text-[#3e2723] sm:text-[1.65rem]">
+      <h1 className="page-title mt-3">
         {match.team_a?.name ?? "Team A"}
         <span className="mx-2 align-middle text-sm font-semibold text-[#3e2723]/30">
           vs

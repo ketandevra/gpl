@@ -432,7 +432,7 @@ export function AdminTeamsClient({
   }
 
   return (
-    <div className="px-4 py-8 lg:px-8">
+    <div className="px-3 py-5 sm:px-4 sm:py-8 lg:px-8">
       <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#2aa7ad]">
         Admin
       </p>

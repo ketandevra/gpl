@@ -2,10 +2,26 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useRef, useState, useEffect } from "react";
+import { useRef, useState, useEffect, type ReactNode } from "react";
 import { PlayerIdCard } from "@/components/auth/PlayerIdCard";
 import { AvatarCropDialog } from "@/components/profile/AvatarCropDialog";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import {
+  IconAdmin,
+  IconBadge,
+  IconBat,
+  IconChevron,
+  IconIdCard,
+  IconInvite,
+  IconLogout,
+  IconPhone,
+  IconScore,
+  IconShield,
+  IconShirt,
+  IconTeam,
+} from "@/components/ui/Icons";
 import { UserAvatar } from "@/components/ui/UserAvatar";
+import { VerifiedBadge } from "@/components/ui/VerifiedBadge";
 import { roleLabel, type SessionUser } from "@/lib/auth/permissions";
 import { compressImageFile } from "@/lib/images/compress-client";
 import { playerRoleLabel } from "@/lib/teams/labels";
@@ -23,6 +39,92 @@ type CaptainTeam = {
   short_name: string;
   registration_status: string;
 };
+
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <section className="mt-4">
+      <h2 className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#3e2723]/45">
+        {title}
+      </h2>
+      <div className="mt-1.5 divide-y divide-[#3e2723]/6 overflow-hidden rounded-[1.25rem] border border-[#3e2723]/8 bg-white shadow-[0_8px_22px_rgba(62,39,35,0.05)]">
+        {children}
+      </div>
+    </section>
+  );
+}
+
+function InfoRow({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-center gap-3 px-4 py-2.5">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#2aa7ad]/10 text-[#1a7f84]">
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <p className="text-[11px] font-medium text-[#3e2723]/50">{label}</p>
+        <p className="truncate text-sm font-semibold text-[#3e2723]">{value}</p>
+      </div>
+    </div>
+  );
+}
+
+function ActionRow({
+  href,
+  icon,
+  label,
+  tone = "default",
+  onClick,
+}: {
+  href?: string;
+  icon: ReactNode;
+  label: string;
+  tone?: "default" | "gold" | "danger" | "admin";
+  onClick?: () => void;
+}) {
+  const tones = {
+    default: "text-[#3e2723]",
+    gold: "text-[#8a6500]",
+    danger: "text-[#9f1239]",
+    admin: "text-[#1a7f84]",
+  };
+  const className = `flex w-full items-center gap-3 px-4 py-3 text-left ${tones[tone]}`;
+  const inner = (
+    <>
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#3e2723]/6">
+        {icon}
+      </span>
+      <span className="min-w-0 flex-1 text-sm font-semibold">{label}</span>
+      <IconChevron className="h-4 w-4 opacity-40" />
+    </>
+  );
+
+  if (href) {
+    return (
+      <Link href={href} className={className}>
+        {inner}
+      </Link>
+    );
+  }
+
+  return (
+    <button type="button" onClick={onClick} className={className}>
+      {inner}
+    </button>
+  );
+}
 
 export function ProfileClient({
   user,
@@ -48,14 +150,15 @@ export function ProfileClient({
   const [message, setMessage] = useState<string | null>(null);
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [showIdCard, setShowIdCard] = useState(false);
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const [pendingInvites, setPendingInvites] = useState(invites);
   const [inviteBusy, setInviteBusy] = useState<string | null>(null);
 
   useEffect(() => {
     setPendingInvites(invites);
   }, [invites]);
-  const canShowIdCard =
-    user.verification_status === "verified" && Boolean(playerId);
+  const verified = user.verification_status === "verified";
+  const canShowIdCard = verified && Boolean(playerId);
 
   const playingRoleLabelText =
     REGISTRATION_PLAYER_ROLES.find((r) => r.value === playingRole)?.label ??
@@ -104,12 +207,14 @@ export function ProfileClient({
       const res = await fetch("/api/auth/logout", { method: "POST" });
       if (!res.ok) {
         setError("Could not log out. Try again.");
+        setConfirmLogout(false);
         return;
       }
       router.replace("/login");
       router.refresh();
     } catch {
       setError("Network error.");
+      setConfirmLogout(false);
     } finally {
       setLoading(false);
     }
@@ -164,23 +269,31 @@ export function ProfileClient({
   }
 
   return (
-    <div className="mx-auto max-w-lg px-4 py-8 sm:py-10">
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#2aa7ad]">
-        Profile
-      </p>
+    <div className="page max-w-lg">
+      <div className="relative overflow-hidden rounded-[1.75rem] border border-[#3e2723]/8 bg-gradient-to-b from-[#fff8ea] via-white to-white px-5 pb-6 pt-8 text-center shadow-[0_14px_36px_rgba(62,39,35,0.1)]">
+        <div
+          className="pointer-events-none absolute -right-12 -top-10 h-40 w-40 rounded-full bg-[#f5b830]/30 blur-3xl"
+          aria-hidden
+        />
+        <div
+          className="pointer-events-none absolute -left-14 top-24 h-36 w-36 rounded-full bg-[#2aa7ad]/22 blur-3xl"
+          aria-hidden
+        />
 
-      <div className="mt-6 flex flex-col items-center gap-3 rounded-2xl border border-[#3e2723]/10 bg-white p-5 shadow-sm">
-        <div className="relative">
-          <UserAvatar
-            name={user.name}
-            src={avatarUrl}
-            size="lg"
-            shape="circle"
-            fit="cover"
-            className="border-2 border-[#2aa7ad]/30 shadow-sm"
-          />
+        <div className="relative mx-auto w-fit">
+          <div className="rounded-full bg-gradient-to-br from-[#f5b830] via-[#2aa7ad] to-[#1a7f84] p-[3px] shadow-[0_12px_30px_rgba(42,167,173,0.28)]">
+            <span className="block rounded-full bg-white p-1">
+              <UserAvatar
+                name={user.name}
+                src={avatarUrl}
+                size="xl"
+                shape="circle"
+                fit="cover"
+              />
+            </span>
+          </div>
           <label
-            className={`absolute bottom-1 right-1 inline-flex h-9 w-9 cursor-pointer items-center justify-center rounded-full bg-[#2aa7ad] text-white shadow-md ring-2 ring-white transition hover:bg-[#1a7f84] ${
+            className={`absolute bottom-1 right-1 inline-flex h-10 w-10 cursor-pointer items-center justify-center rounded-full bg-[#2aa7ad] text-white shadow-md ring-4 ring-white ${
               uploading ? "pointer-events-none opacity-60" : ""
             }`}
             aria-label={uploading ? "Uploading photo" : "Edit profile photo"}
@@ -212,20 +325,34 @@ export function ProfileClient({
             />
           </label>
         </div>
-        <h1 className="text-center text-2xl font-bold text-[#3e2723]">
+
+        <h1 className="relative mt-5 text-[1.45rem] font-bold leading-tight tracking-tight text-[#3e2723] sm:text-3xl">
           {user.name}
         </h1>
-        {playerId ? (
-          <p className="text-sm font-semibold tracking-wide text-[#1a7f84]">
-            Player ID: {playerId}
+        {playingRoleLabelText ? (
+          <p className="relative mt-1 text-sm font-medium text-[#3e2723]/60">
+            {playingRoleLabelText}
           </p>
         ) : null}
+        <div className="relative mt-3 flex flex-wrap items-center justify-center gap-2">
+          {playerId ? (
+            <p className="inline-flex items-center rounded-full bg-[#2aa7ad]/12 px-3 py-1 text-sm font-semibold tracking-wide text-[#1a7f84]">
+              {playerId}
+            </p>
+          ) : null}
+          {verified ? <VerifiedBadge /> : null}
+        </div>
       </div>
 
       {pendingInvites.length > 0 ? (
-        <section className="mt-4 rounded-2xl border border-[#f5b830]/50 bg-[#fff6df] p-4 shadow-sm">
-          <p className="text-sm font-semibold text-[#3e2723]">
+        <section className="mt-4">
+          <h2 className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#3e2723]/45">
             Team invites
+          </h2>
+          <div className="mt-1.5 rounded-2xl border border-[#f5b830]/45 bg-[#fff6df] p-4 shadow-sm">
+          <p className="flex items-center gap-2 text-sm font-semibold text-[#3e2723]">
+            <IconInvite className="h-4 w-4 text-[#8a6500]" />
+            Pending invites
           </p>
           <p className="mt-1 text-xs text-[#3e2723]/60">
             Accept to join the squad. If you decline, you will not be added.
@@ -268,137 +395,128 @@ export function ProfileClient({
               </li>
             ))}
           </ul>
+          </div>
         </section>
       ) : null}
 
-      <dl className="mt-4 space-y-3 rounded-2xl border border-[#3e2723]/10 bg-white p-5 shadow-sm">
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-[#3e2723]/50">
-            Mobile
-          </dt>
-          <dd className="mt-1 font-medium text-[#3e2723]">
-            {user.mobile_number}
-          </dd>
-        </div>
+      <Section title="Personal details">
+        <InfoRow
+          icon={<IconPhone />}
+          label="Mobile"
+          value={user.mobile_number}
+        />
         {playingRoleLabelText ? (
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-[#3e2723]/50">
-              Playing role
-            </dt>
-            <dd className="mt-1 font-medium text-[#3e2723]">
-              {playingRoleLabelText}
-            </dd>
-          </div>
+          <InfoRow
+            icon={<IconBat />}
+            label="Playing role"
+            value={playingRoleLabelText}
+          />
         ) : null}
         {tshirtSize ? (
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-[#3e2723]/50">
-              T-shirt size
-            </dt>
-            <dd className="mt-1 font-medium text-[#3e2723]">{tshirtSize}</dd>
-          </div>
+          <InfoRow icon={<IconShirt />} label="T-shirt" value={tshirtSize} />
         ) : null}
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-[#3e2723]/50">
-            Account role
-          </dt>
-          <dd className="mt-1 font-medium text-[#3e2723]">
-            {roleLabel(user.role)}
-          </dd>
-        </div>
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-[#3e2723]/50">
-            Verification
-          </dt>
-          <dd className="mt-1 font-medium text-[#3e2723]">
-            {verificationStatusLabel(user.verification_status)}
-          </dd>
-        </div>
-      </dl>
+      </Section>
+
+      <Section title="Account">
+        <InfoRow
+          icon={<IconShield />}
+          label="Role"
+          value={roleLabel(user.role)}
+        />
+        {!verified ? (
+          <InfoRow
+            icon={<IconBadge />}
+            label="Verification"
+            value={verificationStatusLabel(user.verification_status)}
+          />
+        ) : null}
+      </Section>
 
       {captainTeams.length > 0 ? (
-        <div className="mt-4 rounded-2xl border border-[#2aa7ad]/25 bg-[#2aa7ad]/8 p-4">
-          <p className="text-sm font-semibold text-[#1a7f84]">Your team (captain)</p>
-          <ul className="mt-2 space-y-2">
-            {captainTeams.map((t) => (
-              <li key={t.id}>
-                <Link
-                  href={`/teams/${t.id}`}
-                  className="font-semibold text-[#3e2723] hover:text-[#1a7f84]"
-                >
-                  {t.name} ({t.short_name}) — manage squad →
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </div>
+        <Section title="Teams">
+          {captainTeams.map((team) => (
+            <Link
+              key={team.id}
+              href={`/teams/${team.id}`}
+              className="flex items-center gap-3 px-4 py-3"
+            >
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#2aa7ad]/10 text-[#1a7f84]">
+                <IconTeam />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-semibold text-[#3e2723]">
+                  {team.name}
+                </span>
+                <span className="block text-[11px] font-medium text-[#3e2723]/50">
+                  {team.short_name} · Captain
+                </span>
+              </span>
+              <IconChevron className="h-4 w-4 text-[#1a7f84]/50" />
+            </Link>
+          ))}
+        </Section>
       ) : null}
 
-      {canShowIdCard ? (
-        <button
-          type="button"
-          onClick={() => setShowIdCard(true)}
-          className="touch-target mt-4 flex w-full items-center justify-center rounded-full bg-[#f5b830] px-5 py-3 text-sm font-semibold text-[#3e2723] transition hover:bg-[#ffcf5c]"
-        >
-          ID Card
-        </button>
-      ) : null}
-
-      {user.verification_status !== "verified" ? (
-        <Link
+      <Section title="Player">
+        {canShowIdCard ? (
+          <ActionRow
+            icon={<IconIdCard />}
+            label="ID card"
+            tone="gold"
+            onClick={() => setShowIdCard(true)}
+          />
+        ) : null}
+        <ActionRow
           href="/verify"
-          className="mt-4 flex touch-target w-full items-center justify-center rounded-full bg-[#2aa7ad] px-5 py-3 text-sm font-semibold text-white"
-        >
-          {user.verification_status === "pending"
-            ? "View registration status"
-            : "Register as player"}
-        </Link>
-      ) : (
-        <Link
-          href="/verify"
-          className="mt-4 inline-flex text-sm font-semibold text-[#1a7f84]"
-        >
-          View player registration →
-        </Link>
-      )}
-
-      {user.role === "admin" ? (
-        <Link
-          href="/admin"
-          className="mt-4 inline-flex touch-target items-center justify-center rounded-full bg-[#2aa7ad] px-5 py-3 text-sm font-semibold text-white"
-        >
-          Open admin dashboard
-        </Link>
-      ) : null}
+          icon={<IconBadge />}
+          label={
+            !verified
+              ? user.verification_status === "pending"
+                ? "View registration"
+                : "Register as player"
+              : "Player registration"
+          }
+          tone={!verified ? "admin" : "default"}
+        />
+      </Section>
 
       {user.role === "admin" || user.role === "scorer" ? (
-        <Link
-          href="/scoring"
-          className="mt-3 inline-flex touch-target items-center justify-center rounded-full border border-[#d81b60]/40 bg-[#fff5f8] px-5 py-3 text-sm font-semibold text-[#d81b60]"
-        >
-          Scoring desk
-        </Link>
+        <Section title="Tools">
+          {user.role === "admin" ? (
+            <ActionRow
+              href="/admin"
+              icon={<IconAdmin />}
+              label="Admin dashboard"
+              tone="admin"
+            />
+          ) : null}
+          <ActionRow
+            href="/scoring"
+            icon={<IconScore />}
+            label="Scoring desk"
+          />
+        </Section>
       ) : null}
 
+      <Section title="Session">
+        <ActionRow
+          icon={<IconLogout />}
+          label="Log out"
+          tone="danger"
+          onClick={() => setConfirmLogout(true)}
+        />
+      </Section>
+
       {message ? (
-        <p className="mt-4 text-sm text-[#1a7f84]" role="status">
+        <p className="mt-3 text-sm text-[#1a7f84]" role="status">
           {message}
         </p>
       ) : null}
       {error ? (
-        <p className="mt-4 text-sm text-[#9f1239]" role="alert">
+        <p className="mt-3 text-sm text-[#9f1239]" role="alert">
           {error}
         </p>
       ) : null}
-
-      <button
-        type="button"
-        onClick={logout}
-        disabled={loading}
-        className="touch-target mt-6 flex w-full items-center justify-center rounded-full border border-[#3e2723]/20 bg-white px-5 py-3 text-sm font-semibold text-[#3e2723] disabled:opacity-60"
-      >
-        {loading ? "Signing out…" : "Log out"}
-      </button>
 
       {cropFile ? (
         <AvatarCropDialog
@@ -416,6 +534,18 @@ export function ProfileClient({
           playerId={playerId}
           playingRole={playingRoleLabelText}
           avatarUrl={avatarUrl}
+        />
+      ) : null}
+
+      {confirmLogout ? (
+        <ConfirmDialog
+          title="Log out?"
+          body="You’ll need your mobile number and PIN to sign back in."
+          confirmLabel="Log out"
+          danger
+          busy={loading}
+          onCancel={() => setConfirmLogout(false)}
+          onConfirm={() => void logout()}
         />
       ) : null}
     </div>

@@ -17,8 +17,8 @@ export default async function AdminLayout({
 
   if (!canAccessAdmin(user)) {
     return (
-      <div className="mx-auto max-w-lg px-4 py-12 text-center">
-        <h1 className="text-2xl font-bold text-[#3e2723]">Access denied</h1>
+      <div className="page max-w-lg text-center">
+        <h1 className="page-title">Access denied</h1>
         <p className="mt-3 text-sm text-[#3e2723]/70">
           Admin tools are only available to GPL administrators.
         </p>
