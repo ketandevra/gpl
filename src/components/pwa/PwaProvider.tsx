@@ -32,6 +32,10 @@ function isIos() {
   return /iphone|ipad|ipod/i.test(window.navigator.userAgent);
 }
 
+function isAndroid() {
+  return /android/i.test(window.navigator.userAgent);
+}
+
 export function PwaProvider() {
   const [mode, setMode] = useState<"splash" | "gate" | "ready">("splash");
   const [installEvent, setInstallEvent] =
@@ -80,7 +84,7 @@ export function PwaProvider() {
       const timer = window.setTimeout(() => {
         sessionStorage.setItem("gpl-splash-shown", "1");
         setMode("ready");
-      }, 400);
+      }, 3000);
       return () => {
         window.clearTimeout(timer);
         window.removeEventListener("beforeinstallprompt", onPrompt);
@@ -99,18 +103,74 @@ export function PwaProvider() {
 
   if (mode === "splash") {
     return (
-      <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center bg-[#3e2723] px-8">
+      <div className="gpl-splash-screen">
+        <div className="gpl-splash-glow gpl-splash-glow-a" aria-hidden />
+        <div className="gpl-splash-glow gpl-splash-glow-b" aria-hidden />
+        <div className="gpl-splash-inner">
+          <div>
+            <div className="gpl-splash-kicker text-[11px] font-semibold uppercase tracking-[0.32em] text-[#f5b830]">
+              Welcome to
+            </div>
+            <h1 className="gpl-splash-title mt-2 whitespace-nowrap text-[clamp(1.2rem,6.2vw,1.85rem)] font-bold leading-none text-[#fdf6e8]">
+              Ghanchi Premier League
+            </h1>
+          </div>
+          <div className="gpl-splash-logo mx-auto overflow-hidden rounded-2xl bg-[#fdf6e8]">
+            <img
+              src="/icons/icon-512.png"
+              alt=""
+              width={512}
+              height={512}
+              className="h-full w-full object-cover"
+            />
+          </div>
+          <div>
+            <p className="gpl-splash-brand text-3xl font-bold tracking-[0.32em] text-[#f5b830]">
+              {APP_SHORT_NAME}
+            </p>
+            <p className="gpl-splash-line mt-3 text-base font-medium leading-snug text-[#fdf6e8]/85">
+              Live scores. Rising stars. One trophy.
+            </p>
+            <p className="gpl-splash-sub mt-1 text-sm leading-snug text-[#fdf6e8]/55">
+              The season is on.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (isIos()) {
+    return (
+      <div className="fixed inset-0 z-[80] overflow-y-auto bg-[#3e2723] px-3 py-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]">
         <img
-          src="/icons/icon-512.png"
-          alt={APP_NAME}
-          className="h-36 w-36 rounded-[2rem] bg-[#fdf6e8] object-contain shadow-2xl"
+          src="/pwa/ios-install.png"
+          alt="Install GPL on iPhone or iPad: open in Safari, tap Share, choose Add to Home Screen, then open GPL from the Home Screen."
+          className="mx-auto w-full max-w-lg rounded-2xl bg-white shadow-2xl"
         />
-        <p className="mt-6 text-2xl font-bold tracking-[0.28em] text-[#f5b830]">
-          {APP_SHORT_NAME}
-        </p>
-        <p className="mt-2 text-center text-sm font-medium text-[#fdf6e8]/80">
-          {APP_NAME}
-        </p>
+      </div>
+    );
+  }
+
+  if (isAndroid()) {
+    return (
+      <div className="fixed inset-0 z-[80] overflow-y-auto bg-[#3e2723] px-3 py-4 pb-[max(6rem,env(safe-area-inset-bottom))] pt-[max(1rem,env(safe-area-inset-top))]">
+        <img
+          src="/pwa/android-install.png"
+          alt="Install GPL on Android: open in Chrome, tap Install app, confirm Install, then open GPL from the Home Screen."
+          className="mx-auto w-full max-w-lg rounded-2xl bg-white shadow-2xl"
+        />
+        {installEvent ? (
+          <div className="fixed inset-x-0 bottom-0 z-[81] bg-[#3e2723]/95 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+            <button
+              type="button"
+              onClick={() => void install()}
+              className="mx-auto block w-full max-w-lg rounded-full bg-[#f5b830] px-6 py-3 text-sm font-bold text-[#3e2723]"
+            >
+              Install app
+            </button>
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -120,7 +180,7 @@ export function PwaProvider() {
       <img
         src="/icons/icon-512.png"
         alt=""
-        className="h-32 w-32 rounded-[1.75rem] bg-[#fdf6e8] object-contain shadow-2xl"
+        className="h-32 w-32 rounded-xl bg-[#fdf6e8] object-cover shadow-2xl"
       />
       <p className="mt-6 text-2xl font-bold tracking-[0.28em] text-[#f5b830]">
         {APP_SHORT_NAME}
@@ -141,12 +201,6 @@ export function PwaProvider() {
         >
           Install app
         </button>
-      ) : isIos() ? (
-        <ol className="mt-8 max-w-sm space-y-2 text-left text-sm text-[#fdf6e8]/90">
-          <li>1. Tap the Share button in Safari</li>
-          <li>2. Choose Add to Home Screen</li>
-          <li>3. Open the GPL icon to continue</li>
-        </ol>
       ) : (
         <p className="mt-8 max-w-sm text-sm text-[#fdf6e8]/80">
           Use your browser menu to install GPL, then open it from the home

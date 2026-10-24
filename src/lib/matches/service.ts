@@ -15,6 +15,7 @@ import type {
   updateMatchSchema,
 } from "@/lib/validations/matches";
 import type { z } from "zod";
+import { advanceKnockoutFromMatch } from "@/lib/fixtures/service";
 import type { Json, MatchStatus } from "@/lib/types/database";
 
 type CreateInput = z.infer<typeof createMatchSchema>;
@@ -238,6 +239,16 @@ export async function applyMatchAction(
       if (!["live", "innings_break", "scheduled"].includes(existing.status)) {
         return { error: "This match cannot be completed from its current status.", status: 400 };
       }
+      if (
+        (existing.stage === "knockout" ||
+          ["semi", "final", "quarter", "last16", "prelim"].includes(existing.match_type)) &&
+        !input.winner_team_id
+      ) {
+        return {
+          error: "Knockout matches need a winner before they can be completed.",
+          status: 400,
+        };
+      }
       nextStatus = "completed";
       if (input.winner_team_id !== undefined) {
         patch.winner_team_id = input.winner_team_id;
@@ -251,6 +262,15 @@ export async function applyMatchAction(
     case "draw":
       if (existing.status === "abandoned") {
         return { error: "An abandoned match cannot be marked as a draw.", status: 400 };
+      }
+      if (
+        existing.stage === "knockout" ||
+        ["semi", "final", "quarter", "last16", "prelim"].includes(existing.match_type)
+      ) {
+        return {
+          error: "Knockout matches need a winner. Use Super Over or pick a winner before advancing.",
+          status: 400,
+        };
       }
       nextStatus = "completed";
       patch.winner_team_id = null;
@@ -336,6 +356,17 @@ export async function applyMatchAction(
     });
 
     const view = await getMatchById(matchId);
+    if (
+      view &&
+      (input.action === "complete" || input.action === "super_over") &&
+      view.winner_team_id
+    ) {
+      try {
+        await advanceKnockoutFromMatch(view);
+      } catch (err) {
+        console.error("[matches] knockout advance failed:", err);
+      }
+    }
     return { match: view! };
   } catch (err) {
     console.error("[matches] action failed:", err);

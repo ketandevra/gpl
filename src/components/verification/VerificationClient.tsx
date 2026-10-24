@@ -281,7 +281,7 @@ export function VerificationClient() {
           />
           {!photosDone ? (
             <p className="text-xs text-[#3e2723]/55">
-              You can leave now and come back to upload photos later.
+              Upload both Aadhaar photos to finish. You can log out and return later.
             </p>
           ) : null}
         </div>

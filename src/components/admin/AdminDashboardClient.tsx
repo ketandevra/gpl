@@ -139,9 +139,12 @@ export function AdminDashboardClient({
         {[
           ["/admin/tournaments", "Tournaments"],
           ["/admin/users", "Users"],
+          ["/admin/activity", "Activity"],
+          ["/admin/reports", "Reports"],
           ["/admin/verifications", "Verifications"],
           ["/admin/teams", "Teams"],
           ["/admin/players", "Players"],
+          ["/admin/fixtures", "Fixtures"],
           ["/admin/matches", "Matches"],
           ["/admin/scoring", "Scoring desk"],
         ].map(([href, label]) => (

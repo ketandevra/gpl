@@ -137,7 +137,14 @@ export function AdminUsersClient({
       </p>
       <h1 className="mt-2 text-2xl font-bold text-[#3e2723]">Users</h1>
       <p className="mt-1 text-sm text-[#3e2723]/60">
-        Manage roles, disable accounts, and reset PINs.
+        Manage roles, disable accounts, and reset PINs.{" "}
+        <Link href="/admin/activity" className="font-semibold text-[#1a7f84]">
+          View login activity
+        </Link>
+        {" · "}
+        <Link href="/admin/reports" className="font-semibold text-[#1a7f84]">
+          Reports
+        </Link>
       </p>
 
       <div

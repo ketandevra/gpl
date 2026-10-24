@@ -32,6 +32,7 @@ export type MatchForPoints = {
   team_b_id: string;
   status: string;
   match_type: string;
+  stage?: string | null;
   winner_team_id: string | null;
   overs_per_innings: number;
 };
@@ -115,8 +116,8 @@ export function nrrOversForInnings(
 }
 
 function isStandingsMatch(match: MatchForPoints): boolean {
-  // Friendlies never affect the table; knockout still can award points if completed.
-  return match.match_type !== "friendly";
+  if (match.stage === "knockout") return false;
+  return match.match_type === "league";
 }
 
 function isResultMatch(status: string): boolean {
@@ -131,6 +132,7 @@ export function buildPointsTable(input: {
   matches: MatchForPoints[];
   innings: InningsForPoints[];
   config?: Partial<PointsConfig> | null;
+  drawPositions?: Map<string, number> | Record<string, number>;
 }): PointsRow[] {
   const config = resolvePointsConfig(input.config);
   const rows = new Map<string, PointsRow>();
@@ -214,10 +216,22 @@ export function buildPointsTable(input: {
     return { ...row, nrr: Number(nrr.toFixed(4)) };
   });
 
+  const drawPos = (teamId: string): number => {
+    if (!input.drawPositions) return Number.MAX_SAFE_INTEGER;
+    if (input.drawPositions instanceof Map) {
+      return input.drawPositions.get(teamId) ?? Number.MAX_SAFE_INTEGER;
+    }
+    return input.drawPositions[teamId] ?? Number.MAX_SAFE_INTEGER;
+  };
+
   table.sort((a, b) => {
     if (b.points !== a.points) return b.points - a.points;
     if (b.nrr !== a.nrr) return b.nrr - a.nrr;
-    return a.team_name.localeCompare(b.team_name);
+    const byDraw = drawPos(a.team_id) - drawPos(b.team_id);
+    if (byDraw !== 0) return byDraw;
+    const byName = a.team_name.localeCompare(b.team_name);
+    if (byName !== 0) return byName;
+    return a.team_id.localeCompare(b.team_id);
   });
 
   return table;

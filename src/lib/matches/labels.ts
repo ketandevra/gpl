@@ -14,6 +14,10 @@ export function matchStatusLabel(status: MatchStatus): string {
       return "Completed";
     case "abandoned":
       return "Abandoned";
+    case "postponed":
+      return "Postponed";
+    case "cancelled":
+      return "Cancelled";
     default:
       return status;
   }

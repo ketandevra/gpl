@@ -22,13 +22,32 @@ export type PlayerRole =
   | "all_rounder"
   | "wicket_keeper";
 export type TshirtSize = "XS" | "S" | "M" | "L" | "XL" | "XXL" | "XXXL";
-export type MatchType = "league" | "semi" | "final" | "friendly";
+export type MatchType =
+  | "league"
+  | "semi"
+  | "final"
+  | "friendly"
+  | "quarter"
+  | "last16"
+  | "prelim";
 export type MatchStatus =
   | "scheduled"
   | "live"
   | "innings_break"
   | "completed"
-  | "abandoned";
+  | "abandoned"
+  | "postponed"
+  | "cancelled";
+export type TournamentFormat = "league_knockout";
+export type TournamentDrawStatus = "pending" | "in_progress" | "confirmed";
+export type TournamentLeagueMethod = "minimum" | "round_robin";
+export type TournamentStage =
+  | "setup"
+  | "draw"
+  | "league"
+  | "knockout"
+  | "completed";
+export type FixtureStage = "league" | "knockout";
 export type TossDecision = "bat" | "bowl";
 export type InningsStatus = "not_started" | "in_progress" | "completed";
 export type ExtraType = "wide" | "no_ball" | "bye" | "leg_bye" | "penalty";
@@ -195,6 +214,22 @@ export interface Database {
           points_tie: number;
           points_nr: number;
           points_loss: number;
+          format: TournamentFormat;
+          min_league_matches: number;
+          knockout_qualifiers: number;
+          league_method: TournamentLeagueMethod;
+          draw_status: TournamentDrawStatus;
+          draw_confirmed_at: string | null;
+          draw_confirmed_by: string | null;
+          participant_team_ids: string[];
+          league_fixtures_confirmed: boolean;
+          league_fixtures_confirmed_at: string | null;
+          league_stage_completed: boolean;
+          league_stage_completed_at: string | null;
+          current_stage: TournamentStage;
+          league_batch_id: string | null;
+          knockout_batch_id: string | null;
+          champion_team_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -212,6 +247,13 @@ export interface Database {
           points_tie?: number;
           points_nr?: number;
           points_loss?: number;
+          format?: TournamentFormat;
+          min_league_matches?: number;
+          knockout_qualifiers?: number;
+          league_method?: TournamentLeagueMethod;
+          draw_status?: TournamentDrawStatus;
+          participant_team_ids?: string[];
+          current_stage?: TournamentStage;
           created_at?: string;
           updated_at?: string;
         };
@@ -363,6 +405,12 @@ export interface Database {
           toss_decision: TossDecision | null;
           winner_team_id: string | null;
           result_text: string | null;
+          stage: FixtureStage;
+          round_number: number | null;
+          match_number: number | null;
+          generated_batch_id: string | null;
+          knockout_key: string | null;
+          feeds_key: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -380,6 +428,12 @@ export interface Database {
           toss_decision?: TossDecision | null;
           winner_team_id?: string | null;
           result_text?: string | null;
+          stage?: FixtureStage;
+          round_number?: number | null;
+          match_number?: number | null;
+          generated_batch_id?: string | null;
+          knockout_key?: string | null;
+          feeds_key?: string | null;
           created_at?: string;
           updated_at?: string;
         };

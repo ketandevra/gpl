@@ -31,6 +31,19 @@ export function canAccessAdmin(user: SessionUser | null | undefined): boolean {
   return isAdmin(user);
 }
 
+/** Non-admin accounts stay on /verify until they are verified. */
+export function needsVerificationLock(
+  user: SessionUser | null | undefined,
+): boolean {
+  if (!user) return false;
+  if (isAdmin(user)) return false;
+  return user.verification_status !== "verified";
+}
+
+export function isVerificationAllowedPath(pathname: string): boolean {
+  return pathname === "/verify" || pathname.startsWith("/verify/");
+}
+
 export function roleLabel(role: UserRole): string {
   switch (role) {
     case "admin":

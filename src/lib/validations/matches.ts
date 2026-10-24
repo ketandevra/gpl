@@ -1,12 +1,22 @@
 import { z } from "zod";
 
-export const matchTypeSchema = z.enum(["league", "semi", "final", "friendly"]);
+export const matchTypeSchema = z.enum([
+  "league",
+  "semi",
+  "final",
+  "friendly",
+  "quarter",
+  "last16",
+  "prelim",
+]);
 export const matchStatusSchema = z.enum([
   "scheduled",
   "live",
   "innings_break",
   "completed",
   "abandoned",
+  "postponed",
+  "cancelled",
 ]);
 export const tossDecisionSchema = z.enum(["bat", "bowl"]);
 

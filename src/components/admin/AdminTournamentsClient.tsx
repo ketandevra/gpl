@@ -478,6 +478,12 @@ export function AdminTournamentsClient({ tournaments: initial }: Props) {
                 </div>
               </div>
               <div className="mt-3 flex flex-wrap gap-2">
+                <a
+                  href={`/admin/fixtures?tournament=${t.id}`}
+                  className="rounded-full border border-[#2aa7ad]/40 px-3 py-1.5 text-xs font-semibold text-[#1a7f84]"
+                >
+                  Fixtures
+                </a>
                 <button
                   type="button"
                   onClick={() =>

@@ -3,6 +3,7 @@ import type {
   MatchType,
   TossDecision,
 } from "@/lib/types/database";
+import type { FixtureStage } from "@/lib/fixtures/types";
 
 export type MatchRow = {
   id: string;
@@ -20,6 +21,12 @@ export type MatchRow = {
   result_text: string | null;
   created_at: string;
   updated_at: string;
+  stage?: FixtureStage | null;
+  round_number?: number | null;
+  match_number?: number | null;
+  generated_batch_id?: string | null;
+  knockout_key?: string | null;
+  feeds_key?: string | null;
 };
 
 export type TeamBrief = {

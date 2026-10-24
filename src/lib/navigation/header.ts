@@ -36,7 +36,7 @@ export function getAppHeader(
     return { title: "Register", backHref: null };
   }
   if (pathname.startsWith("/verify")) {
-    return { title: "Registration", backHref: "/profile" };
+    return { title: "Registration", backHref: null };
   }
   const scoreMatch = pathname.match(/^\/score\/([^/]+)/);
   if (scoreMatch) {

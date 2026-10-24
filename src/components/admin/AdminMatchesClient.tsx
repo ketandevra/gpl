@@ -437,6 +437,9 @@ export function AdminMatchesClient({
               className="field-select"
             >
               <option value="league">League</option>
+              <option value="prelim">Preliminary</option>
+              <option value="last16">Round of 16</option>
+              <option value="quarter">Quarter</option>
               <option value="semi">Semi</option>
               <option value="final">Final</option>
               <option value="friendly">Friendly</option>

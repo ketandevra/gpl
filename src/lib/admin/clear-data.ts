@@ -51,6 +51,16 @@ async function clearMatches(): Promise<void> {
   await del("balls");
   await del("innings");
   await del("match_scorers", "?match_id=not.is.null");
+  try {
+    await del("tournament_knockout_slots");
+  } catch (err) {
+    if (
+      !(err instanceof RestError) ||
+      (err.status !== 404 && !/does not exist|schema cache/i.test(err.message))
+    ) {
+      throw err;
+    }
+  }
   await del("matches");
 }
 

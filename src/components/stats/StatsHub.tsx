@@ -10,9 +10,16 @@ import {
   type FieldingLeaderRow,
   type MvpLeaderRow,
 } from "@/lib/stats/leaderboard";
+import { KnockoutBracket } from "@/components/fixtures/KnockoutBracket";
+import {
+  progressFromTournament,
+  TournamentProgress,
+} from "@/components/fixtures/TournamentProgress";
+import type { KnockoutPreview } from "@/lib/fixtures/types";
+import type { MatchRow } from "@/lib/matches/types";
 import type { PointsRow } from "@/lib/stats/points";
 
-type Tab = "points" | "leaderboard";
+type Tab = "points" | "leaderboard" | "knockout";
 type Board = "bat" | "bowl" | "field" | "mvp";
 
 type Props = {
@@ -22,6 +29,19 @@ type Props = {
   bowling: BowlingLeaderRow[];
   fielding: FieldingLeaderRow[];
   mvp: MvpLeaderRow[];
+  knockout?: {
+    preview: KnockoutPreview | null;
+    matches: MatchRow[];
+    teams: { id: string; name: string }[];
+    championName: string | null;
+    progress: {
+      draw_status: string;
+      league_fixtures_confirmed: boolean;
+      league_stage_completed: boolean;
+      champion_team_id: string | null;
+      knockout_batch_id: string | null;
+    };
+  } | null;
 };
 
 function Photo({ src, name }: { src: string | null; name: string }) {
@@ -94,6 +114,7 @@ export function StatsHub({
   bowling,
   fielding,
   mvp,
+  knockout = null,
 }: Props) {
   const [tab, setTab] = useState<Tab>("leaderboard");
   const [board, setBoard] = useState<Board>("bat");
@@ -148,11 +169,20 @@ export function StatsHub({
         Points table and player leaderboards from scored matches.
       </p>
 
-      <div className="seg-track mt-4 grid-cols-2 sm:mt-6">
+      {knockout ? (
+        <div className="mt-4">
+          <TournamentProgress
+            current={progressFromTournament(knockout.progress)}
+          />
+        </div>
+      ) : null}
+
+      <div className={`seg-track mt-4 sm:mt-6 ${knockout ? "grid-cols-3" : "grid-cols-2"}`}>
         {(
           [
             ["points", "Points table"],
             ["leaderboard", "Leaderboard"],
+            ...(knockout ? [["knockout", "Knockout"] as const] : []),
           ] as const
         ).map(([id, label]) => (
           <button
@@ -171,6 +201,15 @@ export function StatsHub({
       {tab === "points" ? (
         <section className="mt-6">
           <PointsTable rows={points} />
+        </section>
+      ) : tab === "knockout" && knockout ? (
+        <section className="mt-6">
+          <KnockoutBracket
+            preview={knockout.preview}
+            matches={knockout.matches}
+            teams={knockout.teams}
+            championName={knockout.championName}
+          />
         </section>
       ) : (
         <section className="mt-6">
