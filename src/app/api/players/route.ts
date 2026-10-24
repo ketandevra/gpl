@@ -4,6 +4,7 @@ import { canAccessAdmin } from "@/lib/auth/permissions";
 import { createTournamentPlayer } from "@/lib/teams/service";
 import {
   getActiveTournament,
+  getTeamById,
   searchVerifiedPlayersForPicker,
 } from "@/lib/teams/queries";
 import { createTournamentPlayerSchema } from "@/lib/validations/teams";
@@ -23,20 +24,28 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const excludeTeamId = searchParams.get("exclude_team_id") ?? undefined;
     const q = (searchParams.get("q") ?? "").trim();
+    const requestedTournament = searchParams.get("tournament_id");
 
-    const tournament = await getActiveTournament();
-    if (!tournament) {
+    let tournamentId = requestedTournament;
+    if (!tournamentId && excludeTeamId) {
+      const team = await getTeamById(excludeTeamId);
+      tournamentId = team?.tournament_id ?? null;
+    }
+    if (!tournamentId) {
+      tournamentId = (await getActiveTournament())?.id ?? null;
+    }
+    if (!tournamentId) {
       return NextResponse.json({ players: [], tournament: null });
     }
 
-    const players = await searchVerifiedPlayersForPicker(tournament.id, {
+    const players = await searchVerifiedPlayersForPicker(tournamentId, {
       excludeTeamId,
       q,
       limit: 40,
     });
 
     return NextResponse.json({
-      tournament: { id: tournament.id, name: tournament.name },
+      tournament: { id: tournamentId },
       players,
     });
   } catch (err) {

@@ -9,7 +9,7 @@ import {
   updateMatch,
 } from "@/lib/matches/service";
 import { listMatches, listScorerUsers } from "@/lib/matches/queries";
-import { listApprovedTeams } from "@/lib/teams/queries";
+import { listMatchableTeams } from "@/lib/teams/queries";
 import {
   createMatchSchema,
   matchActionSchema,
@@ -32,7 +32,7 @@ export async function GET() {
 
   const [matches, teams, scorers] = await Promise.all([
     listMatches(),
-    listApprovedTeams(),
+    listMatchableTeams(),
     listScorerUsers(),
   ]);
 

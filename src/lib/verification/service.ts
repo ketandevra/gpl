@@ -23,6 +23,7 @@ import {
 } from "@/lib/verification/helpers";
 import { getActiveTournament, getPrimaryTournament } from "@/lib/teams/queries";
 import type { PlayerRow } from "@/lib/teams/queries";
+import { ensurePlayerInTournament } from "@/lib/teams/player-records";
 
 export {
   getOwnVerificationSummary,
@@ -173,16 +174,6 @@ export async function submitVerification(
   const aadhaar = aadhaarDigits(prefs.aadhaar_number);
   if (!isValidAadhaarNumber(aadhaar)) {
     return { error: "Aadhaar number must be 12 digits.", status: 400 };
-  }
-
-  const docs = await listVerificationDocuments(user.id);
-  const hasFront = docs.some((d) => d.doc_type === "aadhaar_front");
-  const hasBack = docs.some((d) => d.doc_type === "aadhaar_back");
-  if (!hasFront || !hasBack) {
-    return {
-      error: "Upload both Aadhaar front and back photos before submitting.",
-      status: 400,
-    };
   }
 
   try {
@@ -712,46 +703,5 @@ export async function ensureTournamentPlayerForUser(
 ): Promise<PlayerRow | null> {
   const tournament = await getPrimaryTournament();
   if (!tournament) return null;
-
-  const existing = await withRetry(() =>
-    adminRest<PlayerRow[]>("players", {
-      query: `?tournament_id=eq.${encodeURIComponent(tournament.id)}&user_id=eq.${encodeURIComponent(userId)}&select=*&limit=1`,
-    }),
-  );
-  if (existing[0]) return existing[0];
-
-  const user = await getUserVerification(userId);
-  if (!user || user.verification_status !== "verified") return null;
-
-  const codes = await withRetry(() =>
-    adminRest<Array<{ public_code: string }>>("players", {
-      query: `?tournament_id=eq.${encodeURIComponent(tournament.id)}&select=public_code&order=public_code.desc&limit=50`,
-    }),
-  );
-  let max = 0;
-  for (const row of codes) {
-    const m = /^P(\d+)$/i.exec(row.public_code);
-    if (m) max = Math.max(max, Number(m[1]));
-  }
-  const public_code = `P${String(max + 1).padStart(3, "0")}`;
-
-  const created = await withRetry(() =>
-    adminRest<PlayerRow[]>("players", {
-      method: "POST",
-      prefer: "return=representation",
-      body: [
-        {
-          tournament_id: tournament.id,
-          public_code,
-          name: user.name,
-          mobile_number: user.mobile_number,
-          user_id: userId,
-          role: user.preferred_player_role ?? "batsman",
-          tshirt_size: user.tshirt_size,
-          locked_team_id: null,
-        },
-      ],
-    }),
-  );
-  return created[0] ?? null;
+  return ensurePlayerInTournament(userId, tournament.id);
 }

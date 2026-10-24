@@ -5,6 +5,7 @@ import {
   recordBall,
   setPlayers,
   startInnings,
+  startSuperOver,
   undoLastBall,
 } from "@/lib/scoring/service";
 import {
@@ -50,19 +51,36 @@ export async function POST(request: Request, ctx: Ctx) {
 
   const action = z
     .object({
-      action: z.enum(["start_innings", "set_players", "ball", "undo"]),
+      action: z.enum([
+        "start_innings",
+        "start_super_over",
+        "set_players",
+        "ball",
+        "undo",
+      ]),
     })
     .safeParse(body);
 
   if (!action.success) {
     return NextResponse.json(
-      { error: "action must be start_innings, set_players, ball, or undo." },
+      {
+        error:
+          "action must be start_innings, start_super_over, set_players, ball, or undo.",
+      },
       { status: 400 },
     );
   }
 
   if (action.data.action === "undo") {
     const result = await undoLastBall(auth.user, matchId);
+    if ("error" in result) {
+      return NextResponse.json({ error: result.error }, { status: result.status });
+    }
+    return NextResponse.json(result.board);
+  }
+
+  if (action.data.action === "start_super_over") {
+    const result = await startSuperOver(auth.user, matchId);
     if ("error" in result) {
       return NextResponse.json({ error: result.error }, { status: result.status });
     }

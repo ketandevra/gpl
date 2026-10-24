@@ -4,6 +4,7 @@ import {
   deliverySlot,
   undoLastBall,
 } from "../../src/lib/scoring/engine";
+import { cricheroesBallEvent, runsAgainstBowler } from "../../src/lib/scoring/event";
 import {
   oversFromLegalBalls,
   requiredRunRate,
@@ -91,6 +92,83 @@ describe("applyBall — extras", () => {
     expect(ball.is_legal_delivery).toBe(false);
     expect(ball.extra_runs).toBe(1);
     expect(state.striker_id).toBe("striker"); // no rotation on bare wide
+  });
+
+  it("CricHeroes wide + 4 is 5 extras, not a legal ball", () => {
+    const event = cricheroesBallEvent({ extra_type: "wide", runs: 4 });
+    const { state, ball } = applyBall(freshInnings(), event);
+    expect(event.extra_runs).toBe(5);
+    expect(ball.batsman_runs).toBe(0);
+    expect(state.total_runs).toBe(5);
+    expect(state.legal_balls).toBe(0);
+    expect(runsAgainstBowler(ball)).toBe(5);
+  });
+
+  it("CricHeroes no-ball + 4 bat is 5 team runs and a free hit", () => {
+    const event = cricheroesBallEvent({ extra_type: "no_ball", runs: 4 });
+    const { state, ball } = applyBall(freshInnings(), event);
+    expect(ball.batsman_runs).toBe(4);
+    expect(ball.extra_runs).toBe(1);
+    expect(state.total_runs).toBe(5);
+    expect(state.legal_balls).toBe(0);
+    expect(state.free_hit).toBe(true);
+    expect(runsAgainstBowler(ball)).toBe(5);
+  });
+
+  it("CricHeroes no-ball + bye 2 is 3 extras, bowler only +1", () => {
+    const event = cricheroesBallEvent({
+      extra_type: "no_ball",
+      secondary_extra_type: "bye",
+      runs: 2,
+    });
+    const { state, ball } = applyBall(freshInnings(), event);
+    expect(ball.batsman_runs).toBe(0);
+    expect(ball.extra_runs).toBe(3);
+    expect(state.total_runs).toBe(3);
+    expect(state.legal_balls).toBe(0);
+    expect(runsAgainstBowler(ball)).toBe(1);
+  });
+
+  it("rejects bowled on a wide and still awards the wide", () => {
+    const { state, ball } = applyBall(freshInnings(), {
+      extra_type: "wide",
+      extra_runs: 1,
+      is_wicket: true,
+      wicket_type: "bowled",
+      dismissed_player_id: "striker",
+    });
+    expect(ball.is_wicket).toBe(false);
+    expect(state.wickets).toBe(0);
+    expect(state.total_runs).toBe(1);
+    expect(state.legal_balls).toBe(0);
+  });
+
+  it("allows stumped on a wide", () => {
+    const { state, ball } = applyBall(freshInnings(), {
+      extra_type: "wide",
+      extra_runs: 1,
+      is_wicket: true,
+      wicket_type: "stumped",
+      dismissed_player_id: "striker",
+      new_batter_id: "new_batter",
+    });
+    expect(ball.is_wicket).toBe(true);
+    expect(state.wickets).toBe(1);
+    expect(state.total_runs).toBe(1);
+    expect(state.legal_balls).toBe(0);
+  });
+
+  it("rejects caught on a no-ball", () => {
+    const { state, ball } = applyBall(freshInnings(), {
+      extra_type: "no_ball",
+      extra_runs: 1,
+      is_wicket: true,
+      wicket_type: "caught",
+      dismissed_player_id: "striker",
+    });
+    expect(ball.is_wicket).toBe(false);
+    expect(state.wickets).toBe(0);
+    expect(state.free_hit).toBe(true);
   });
 
   it("wide with additional runs rotates on odd completed runs", () => {
@@ -251,6 +329,40 @@ describe("applyBall — innings end", () => {
     expect(state.status).toBe("completed");
     // No end-of-over rotate when innings finished
     expect(state.striker_id).toBe("non_striker"); // only odd-run rotate
+  });
+
+  it("Super Over ends after 2 wickets", () => {
+    const { state } = applyBall(
+      freshInnings({
+        wickets: 1,
+        overs_per_innings: 1,
+        max_wickets: 2,
+        status: "in_progress",
+      }),
+      {
+        batsman_runs: 0,
+        is_wicket: true,
+        wicket_type: "bowled",
+        dismissed_player_id: "striker",
+      },
+    );
+    expect(state.wickets).toBe(2);
+    expect(state.status).toBe("completed");
+  });
+
+  it("Super Over ends after 6 legal balls", () => {
+    const { state } = applyBall(
+      freshInnings({
+        legal_balls: 5,
+        overs_per_innings: 1,
+        max_wickets: 2,
+        status: "in_progress",
+      }),
+      { batsman_runs: 6 },
+    );
+    expect(state.legal_balls).toBe(6);
+    expect(state.total_runs).toBe(6);
+    expect(state.status).toBe("completed");
   });
 
   it("completes when chase target is reached", () => {

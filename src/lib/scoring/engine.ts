@@ -1,3 +1,4 @@
+import { wicketAllowedOnDelivery } from "./event";
 import type {
   ApplyBallResult,
   BallEvent,
@@ -53,14 +54,18 @@ function resolveExtras(event: BallEvent): {
         extra_type,
         is_legal_delivery: false,
       };
-    case "no_ball":
-      // No-ball: 1+ extras; bat runs still count separately.
+    case "no_ball": {
+      // No-ball: 1 penalty extra; bat runs count separately.
+      // CricHeroes NB + Bye/LB: all additional extras, none off the bat.
+      const fielding = event.secondary_extra_type;
+      const extra_runs = Math.max(1, rawExtra || 1);
       return {
-        batsman_runs: rawBat,
-        extra_runs: Math.max(1, rawExtra || 1),
+        batsman_runs: fielding ? 0 : rawBat,
+        extra_runs,
         extra_type,
         is_legal_delivery: false,
       };
+    }
     case "bye":
     case "leg_bye":
       return {
@@ -108,11 +113,6 @@ function strikeRotationRuns(
     default:
       return batsman_runs;
   }
-}
-
-function wicketAllowedOnFreeHit(wicket_type: WicketType | null): boolean {
-  // Only run-out (of either end) is allowed on a free hit.
-  return wicket_type === "run_out";
 }
 
 function countsAsTeamWicket(wicket_type: WicketType): boolean {
@@ -171,7 +171,14 @@ export function applyBall(
     throw new Error("wicket_type is required when is_wicket is true");
   }
 
-  if (is_free_hit && is_wicket && !wicketAllowedOnFreeHit(wicket_type)) {
+  if (
+    is_wicket &&
+    !wicketAllowedOnDelivery({
+      extra_type,
+      is_free_hit,
+      wicket_type,
+    })
+  ) {
     is_wicket = false;
     wicket_type = null;
     dismissed_player_id = null;

@@ -37,6 +37,7 @@ export type StatsMatchRow = {
   winner_team_id: string | null;
   overs_per_innings: number;
   result_text: string | null;
+  scheduled_at: string | null;
 };
 
 export type StatsInningsRow = {
@@ -56,6 +57,7 @@ export type StatsBallRow = {
   innings_id: string;
   sequence_no: number;
   striker_id: string | null;
+  non_striker_id: string | null;
   bowler_id: string | null;
   batsman_runs: number;
   extra_runs: number;
@@ -65,12 +67,16 @@ export type StatsBallRow = {
   is_wicket: boolean;
   wicket_type: WicketType | null;
   dismissed_player_id: string | null;
+  fielder_id: string | null;
+  assist_fielder_id: string | null;
+  is_caught_behind: boolean;
 };
 
 export type StatsPlayerRow = {
   id: string;
   team_id: string;
   name: string;
+  photo_url: string | null;
 };
 
 export type TournamentStatsBundle = {
@@ -99,7 +105,7 @@ export async function listApprovedTeamsForTournament(
   if (!isSupabaseAdminConfigured()) return [];
   return withRetry(() =>
     adminRest<StatsTeamRow[]>("teams", {
-      query: `?tournament_id=eq.${encodeURIComponent(tournamentId)}&approved=eq.true&registration_status=eq.approved&select=id,tournament_id,name,short_name,approved,registration_status&order=name.asc`,
+      query: `?tournament_id=eq.${encodeURIComponent(tournamentId)}&select=id,tournament_id,name,short_name,approved,registration_status&order=name.asc`,
     }),
   );
 }
@@ -110,7 +116,7 @@ export async function listMatchesForTournament(
   if (!isSupabaseAdminConfigured()) return [];
   return withRetry(() =>
     adminRest<StatsMatchRow[]>("matches", {
-      query: `?tournament_id=eq.${encodeURIComponent(tournamentId)}&select=id,tournament_id,team_a_id,team_b_id,status,match_type,winner_team_id,overs_per_innings,result_text&order=scheduled_at.asc.nullslast`,
+      query: `?tournament_id=eq.${encodeURIComponent(tournamentId)}&select=id,tournament_id,team_a_id,team_b_id,status,match_type,winner_team_id,overs_per_innings,result_text,scheduled_at&order=scheduled_at.asc.nullslast`,
     }),
   );
 }
@@ -130,11 +136,34 @@ export async function listBallsForInnings(
   inningsIds: string[],
 ): Promise<StatsBallRow[]> {
   if (!isSupabaseAdminConfigured() || !inningsIds.length) return [];
-  return withRetry(() =>
-    adminRest<StatsBallRow[]>("balls", {
-      query: `?innings_id=in.(${inningsIds.join(",")})&select=id,innings_id,sequence_no,striker_id,bowler_id,batsman_runs,extra_runs,total_runs,is_legal_delivery,extra_type,is_wicket,wicket_type,dismissed_player_id&order=sequence_no.asc`,
-    }),
-  );
+  const base =
+    "id,innings_id,sequence_no,striker_id,non_striker_id,bowler_id,batsman_runs,extra_runs,total_runs,is_legal_delivery,extra_type,is_wicket,wicket_type,dismissed_player_id";
+  try {
+    return await withRetry(() =>
+      adminRest<StatsBallRow[]>("balls", {
+        query: `?innings_id=in.(${inningsIds.join(",")})&select=${base},fielder_id,assist_fielder_id,is_caught_behind&order=sequence_no.asc`,
+      }),
+    );
+  } catch {
+    const rows = await withRetry(() =>
+      adminRest<
+        Array<
+          Omit<
+            StatsBallRow,
+            "fielder_id" | "assist_fielder_id" | "is_caught_behind"
+          >
+        >
+      >("balls", {
+        query: `?innings_id=in.(${inningsIds.join(",")})&select=${base}&order=sequence_no.asc`,
+      }),
+    );
+    return rows.map((row) => ({
+      ...row,
+      fielder_id: null,
+      assist_fielder_id: null,
+      is_caught_behind: false,
+    }));
+  }
 }
 
 export async function listPlayersByIds(
@@ -144,9 +173,14 @@ export async function listPlayersByIds(
   if (!isSupabaseAdminConfigured() || !unique.length) return [];
   const players = await withRetry(() =>
     adminRest<
-      Array<{ id: string; name: string; locked_team_id: string | null }>
+      Array<{
+        id: string;
+        name: string;
+        photo_url: string | null;
+        locked_team_id: string | null;
+      }>
     >("players", {
-      query: `?id=in.(${unique.join(",")})&select=id,name,locked_team_id`,
+      query: `?id=in.(${unique.join(",")})&select=id,name,photo_url,locked_team_id`,
     }),
   );
   return players
@@ -154,6 +188,7 @@ export async function listPlayersByIds(
     .map((p) => ({
       id: p.id,
       name: p.name,
+      photo_url: p.photo_url,
       team_id: p.locked_team_id as string,
     }));
 }
@@ -169,15 +204,19 @@ export async function listPlayersForTeams(
   );
   if (!memberships.length) return [];
   const players = await withRetry(() =>
-    adminRest<Array<{ id: string; name: string }>>("players", {
-      query: `?id=in.(${[...new Set(memberships.map((m) => m.player_id))].join(",")})&select=id,name`,
-    }),
+    adminRest<Array<{ id: string; name: string; photo_url: string | null }>>(
+      "players",
+      {
+        query: `?id=in.(${[...new Set(memberships.map((m) => m.player_id))].join(",")})&select=id,name,photo_url`,
+      },
+    ),
   );
-  const nameMap = new Map(players.map((p) => [p.id, p.name]));
+  const nameMap = new Map(players.map((p) => [p.id, p]));
   return memberships.map((m) => ({
     id: m.player_id,
     team_id: m.team_id,
-    name: nameMap.get(m.player_id) ?? "Player",
+    name: nameMap.get(m.player_id)?.name ?? "Player",
+    photo_url: nameMap.get(m.player_id)?.photo_url ?? null,
   }));
 }
 

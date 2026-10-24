@@ -25,7 +25,7 @@ export default async function RegisterTeamPage() {
     if (pending) {
       return (
         <div className="mx-auto max-w-lg px-4 py-10">
-          <BackLink href="/teams">Back to teams</BackLink>
+          <BackLink href="/tournaments">Back to tournaments</BackLink>
           <h1 className="mt-5 text-2xl font-bold text-[#3e2723]">
             Request pending
           </h1>
@@ -40,7 +40,7 @@ export default async function RegisterTeamPage() {
 
   return (
     <div className="mx-auto max-w-lg px-4 py-10">
-      <BackLink href="/teams">Back to teams</BackLink>
+      <BackLink href="/tournaments">Back to tournaments</BackLink>
       <h1 className="mt-5 text-2xl font-bold text-[#3e2723]">
         Become a team owner
       </h1>

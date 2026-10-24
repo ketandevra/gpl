@@ -12,6 +12,7 @@ type PlayerCardProps = {
   statusLine?: string;
   statusTone?: "warning" | "available" | "default";
   hideTeamName?: boolean;
+  showMobile?: boolean;
 };
 
 export function PlayerCard({
@@ -20,6 +21,7 @@ export function PlayerCard({
   statusLine,
   statusTone = "warning",
   hideTeamName = false,
+  showMobile = false,
 }: PlayerCardProps) {
   const jersey =
     "jersey_number" in player ? (player.jersey_number as number | null) : null;
@@ -49,6 +51,11 @@ export function PlayerCard({
             {jersey != null ? ` · #${jersey}` : ""}
             {!hideTeamName && player.team_name ? ` · ${player.team_name}` : ""}
           </p>
+          {showMobile && player.mobile_number ? (
+            <p className="mt-0.5 text-xs font-medium tabular-nums text-[#3e2723]/70">
+              {player.mobile_number}
+            </p>
+          ) : null}
           {statusLine ? (
             <p className={statusClass}>{statusLine}</p>
           ) : null}

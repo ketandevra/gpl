@@ -6,17 +6,22 @@ import {
 import {
   aggregateBattingLeaders,
   aggregateBowlingLeaders,
-  computePlayerMatchStats,
   type BattingLeader,
   type BowlingLeader,
   type PlayerMatchStats,
 } from "@/lib/stats/leaders";
+import { getCareerStats } from "@/lib/stats/career";
+import {
+  buildTournamentLeaderboard,
+  type TournamentLeaderboard,
+} from "@/lib/stats/leaderboard";
 import {
   loadTournamentStatsBundle,
   tournamentPointsConfig,
 } from "@/lib/stats/queries";
 
 export type { PointsRow, BattingLeader, BowlingLeader, PlayerMatchStats };
+export type { TournamentLeaderboard };
 export { formatNrr };
 
 export async function getPointsTable(): Promise<PointsRow[]> {
@@ -59,7 +64,17 @@ export async function getBowlingLeaders(limit = 10): Promise<BowlingLeader[]> {
 export async function getPlayerStats(
   playerId: string,
 ): Promise<PlayerMatchStats | null> {
+  const career = await getCareerStats(playerId);
+  return career?.career ?? null;
+}
+
+export { getCareerStats } from "@/lib/stats/career";
+export type { CareerStats, CareerEdition } from "@/lib/stats/career";
+
+export async function getTournamentLeaderboard(): Promise<TournamentLeaderboard> {
   const bundle = await loadTournamentStatsBundle();
-  if (!bundle) return null;
-  return computePlayerMatchStats(playerId, bundle.balls);
+  if (!bundle) {
+    return { batting: [], bowling: [], fielding: [], mvp: [] };
+  }
+  return buildTournamentLeaderboard(bundle);
 }

@@ -42,9 +42,9 @@ export default async function HomePage() {
         : "No matches are live right now. Browse fixtures and results.",
     },
     {
-      href: "/teams",
-      title: "Teams",
-      body: "Squads, managers, and team standings.",
+      href: "/tournaments",
+      title: "Tournaments",
+      body: "Upcoming, ongoing, and past editions with their teams.",
     },
     {
       href: "/stats",

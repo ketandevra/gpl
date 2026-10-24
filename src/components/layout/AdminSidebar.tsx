@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 import { ADMIN_NAV_ITEMS, APP_SHORT_NAME } from "@/lib/constants";
 
 function isActivePath(href: string, pathname: string) {
@@ -37,6 +38,9 @@ export function AdminSidebar() {
       </div>
 
       <aside className="hidden border-r border-[#3e2723]/10 bg-white/70 p-4 lg:sticky lg:top-[4.5rem] lg:block lg:self-start">
+        <div className="mb-3">
+          <BrandLogo variant="full" href="/" className="!max-w-[120px]" />
+        </div>
         <p className="mb-4 text-xs font-semibold uppercase tracking-wider text-[#2aa7ad]">
           {APP_SHORT_NAME} Admin
         </p>

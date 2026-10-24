@@ -12,6 +12,7 @@ export const tossDecisionSchema = z.enum(["bat", "bowl"]);
 
 export const createMatchSchema = z
   .object({
+    tournament_id: z.string().uuid("Select a tournament"),
     team_a_id: z.string().uuid(),
     team_b_id: z.string().uuid(),
     scheduled_at: z.string().min(1, "Schedule date/time is required"),
@@ -52,6 +53,8 @@ export const matchActionSchema = z.object({
     "resume",
     "complete",
     "abandon",
+    "super_over",
+    "start_super_over",
   ]),
   toss_winner_id: z.string().uuid().optional().nullable(),
   toss_decision: tossDecisionSchema.optional().nullable(),

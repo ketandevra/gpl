@@ -272,8 +272,30 @@ export async function invitePlayerToTeam(
     };
   }
 
-  const player = await loadPlayer(playerId);
+  let player = await loadPlayer(playerId);
   if (!player) return { error: "Player not found.", status: 404 };
+
+  if (
+    player.tournament_id !== team.tournament_id &&
+    player.user_id &&
+    canAccessAdmin(actor)
+  ) {
+    const { ensurePlayerInTournament } = await import(
+      "@/lib/teams/player-records"
+    );
+    const cloned = await ensurePlayerInTournament(
+      player.user_id,
+      team.tournament_id,
+    );
+    if (!cloned) {
+      return {
+        error: "Could not add this player to the selected tournament.",
+        status: 400,
+      };
+    }
+    player = cloned;
+    playerId = cloned.id;
+  }
 
   const blocked = await assertPlayerCanJoinTeam(team, player);
   if (blocked) return blocked;

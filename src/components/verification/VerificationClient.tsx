@@ -30,6 +30,8 @@ type Summary = {
   back_url: string | null;
 };
 
+type Step = 1 | 2;
+
 export function VerificationClient() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,6 +41,7 @@ export function VerificationClient() {
   const [tshirtSize, setTshirtSize] = useState<TshirtSize | "">("");
   const [aadhaar, setAadhaar] = useState("");
   const [loaded, setLoaded] = useState(false);
+  const [step, setStep] = useState<Step>(1);
 
   const load = useCallback(async () => {
     try {
@@ -66,6 +69,9 @@ export function VerificationClient() {
       if (next.tshirt_size) {
         setTshirtSize(next.tshirt_size);
       }
+      if (next.status === "pending" || next.status === "verified") {
+        setStep(2);
+      }
     } catch {
       setError("Could not load verification status.");
     } finally {
@@ -77,7 +83,7 @@ export function VerificationClient() {
     void load();
   }, [load]);
 
-  async function submit() {
+  async function submitDetails() {
     if (!playerRole) {
       setError("Select your playing role.");
       return;
@@ -88,10 +94,6 @@ export function VerificationClient() {
     }
     if (!isValidAadhaarNumber(aadhaar)) {
       setError("Enter a 12-digit Aadhaar number.");
-      return;
-    }
-    if (!summary?.has_front || !summary?.has_back) {
-      setError("Upload both Aadhaar front and back photos.");
       return;
     }
     setBusy(true);
@@ -114,8 +116,11 @@ export function VerificationClient() {
         setError(data.error ?? "Submit failed.");
         return;
       }
-      setMessage("Submitted for admin verification.");
       setAadhaar("");
+      setMessage(
+        "Details submitted. Upload Aadhaar photos when you have the card.",
+      );
+      setStep(2);
       await load();
     } catch {
       setError("Network error.");
@@ -140,18 +145,18 @@ export function VerificationClient() {
 
   const canEdit =
     summary.status === "unverified" || summary.status === "rejected";
-  const canSubmit =
+  const canSubmitDetails =
     canEdit &&
     Boolean(playerRole) &&
     Boolean(tshirtSize) &&
     isValidAadhaarNumber(aadhaar) &&
-    summary.has_front &&
-    summary.has_back &&
     !busy;
 
   const roleLabel =
     REGISTRATION_PLAYER_ROLES.find((r) => r.value === summary.preferred_player_role)
       ?.label ?? summary.preferred_player_role;
+
+  const photosDone = summary.has_front && summary.has_back;
 
   return (
     <div className="space-y-4 rounded-2xl border border-[#3e2723]/10 bg-white p-5 shadow-sm">
@@ -186,22 +191,7 @@ export function VerificationClient() {
         </div>
       ) : null}
 
-      {summary.status === "pending" ? (
-        <div className="space-y-1 text-sm text-[#8a6500]">
-          <p>
-            {summary.has_front && summary.has_back
-              ? "Details submitted. Waiting for admin review."
-              : "Submitted. Upload both Aadhaar photos so admin can verify you."}
-          </p>
-          {roleLabel ? <p>Role: {roleLabel}</p> : null}
-          {summary.tshirt_size ? <p>T-shirt: {summary.tshirt_size}</p> : null}
-          {summary.aadhaar_masked ? (
-            <p>Aadhaar: {summary.aadhaar_masked}</p>
-          ) : null}
-        </div>
-      ) : null}
-
-      {canEdit ? (
+      {step === 1 && canEdit ? (
         <div className="space-y-3">
           <div className="grid gap-3 sm:grid-cols-2">
             <label className="block">
@@ -266,14 +256,35 @@ export function VerificationClient() {
         </div>
       ) : null}
 
-      {summary.status !== "verified" ? (
-        <AadhaarPhotos
-          frontUrl={summary.front_url}
-          backUrl={summary.back_url}
-          canUpload
-          required
-          onChanged={load}
-        />
+      {step === 2 && summary.status !== "verified" ? (
+        <div className="space-y-3">
+          {summary.status === "pending" ? (
+            <div className="space-y-1 text-sm text-[#8a6500]">
+              <p>
+                {photosDone
+                  ? "Details and photos submitted. Waiting for admin review."
+                  : "Details submitted. Upload both Aadhaar photos when you have the card."}
+              </p>
+              {roleLabel ? <p>Role: {roleLabel}</p> : null}
+              {summary.tshirt_size ? <p>T-shirt: {summary.tshirt_size}</p> : null}
+              {summary.aadhaar_masked ? (
+                <p>Aadhaar: {summary.aadhaar_masked}</p>
+              ) : null}
+            </div>
+          ) : null}
+          <AadhaarPhotos
+            frontUrl={summary.front_url}
+            backUrl={summary.back_url}
+            canUpload
+            required
+            onChanged={load}
+          />
+          {!photosDone ? (
+            <p className="text-xs text-[#3e2723]/55">
+              You can leave now and come back to upload photos later.
+            </p>
+          ) : null}
+        </div>
       ) : null}
 
       {message ? (
@@ -287,28 +298,29 @@ export function VerificationClient() {
         </p>
       ) : null}
 
-      {canEdit ? (
-        <>
-          {(!summary.has_front || !summary.has_back) ? (
-            <p className="text-xs text-[#3e2723]/55">
-              Upload both Aadhaar photos to enable Submit for Verification.
-            </p>
-          ) : null}
-          <button
-            type="button"
-            disabled={!canSubmit}
-            onClick={() => void submit()}
-            className="w-full rounded-full bg-[#2aa7ad] py-3 text-sm font-semibold text-white disabled:opacity-50"
-          >
-            {busy ? "Submitting…" : "Submit for Verification"}
-          </button>
-        </>
+      {step === 1 && canEdit ? (
+        <button
+          type="button"
+          disabled={!canSubmitDetails}
+          onClick={() => void submitDetails()}
+          className="w-full rounded-full bg-[#2aa7ad] py-3 text-sm font-semibold text-white disabled:opacity-50"
+        >
+          {busy ? "Submitting…" : "Submit details"}
+        </button>
       ) : null}
 
-      {summary.status === "rejected" ? (
-        <p className="text-xs text-[#3e2723]/55">
-          Update your details and submit again.
-        </p>
+      {step === 2 && canEdit ? (
+        <button
+          type="button"
+          onClick={() => {
+            setStep(1);
+            setError(null);
+            setMessage(null);
+          }}
+          className="w-full text-sm font-semibold text-[#1a7f84]"
+        >
+          Back to details
+        </button>
       ) : null}
     </div>
   );

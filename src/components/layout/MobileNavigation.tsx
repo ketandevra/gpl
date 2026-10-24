@@ -26,13 +26,15 @@ function NavIcon({ name, active }: { name: string; active: boolean }) {
           <path d="M5 10v10h14V10" />
         </svg>
       );
-    case "teams":
+    case "tournament":
       return (
         <svg {...common}>
-          <circle cx="9" cy="8" r="3" />
-          <circle cx="16" cy="9" r="2.5" />
-          <path d="M3 19c1.5-3 4-4.5 6-4.5S13.5 16 15 19" />
-          <path d="M14 14.5c1.4 0 3.2.8 4.5 4.5" />
+          <path d="M8 4h8v3a4 4 0 0 1-8 0V4Z" />
+          <path d="M8 6H5a3 3 0 0 0 3 3" />
+          <path d="M16 6h3a3 3 0 0 1-3 3" />
+          <path d="M12 13v3" />
+          <path d="M9 20h6" />
+          <path d="M10 17h4" />
         </svg>
       );
     case "players":
@@ -73,7 +75,10 @@ export function MobileNavigation() {
                 ? pathname.startsWith("/profile") ||
                   pathname.startsWith("/login") ||
                   pathname.startsWith("/register")
-                : pathname.startsWith(item.href);
+                : item.href === "/tournaments"
+                  ? pathname.startsWith("/tournaments") ||
+                    pathname.startsWith("/teams")
+                  : pathname.startsWith(item.href);
 
           return (
             <li key={item.href}>

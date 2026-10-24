@@ -15,6 +15,12 @@ export {
 } from "@/lib/scoring/engine";
 
 export {
+  cricheroesBallEvent,
+  runsAgainstBowler,
+  wicketAllowedOnDelivery,
+} from "@/lib/scoring/event";
+
+export {
   oversFromLegalBalls,
   runRate,
   requiredRunRate,

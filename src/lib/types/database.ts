@@ -455,6 +455,9 @@ export interface Database {
           is_wicket: boolean;
           wicket_type: WicketType | null;
           dismissed_player_id: string | null;
+          fielder_id: string | null;
+          assist_fielder_id: string | null;
+          is_caught_behind: boolean;
           free_hit_next: boolean;
           commentary: string | null;
           created_at: string;
@@ -476,6 +479,9 @@ export interface Database {
           is_wicket?: boolean;
           wicket_type?: WicketType | null;
           dismissed_player_id?: string | null;
+          fielder_id?: string | null;
+          assist_fielder_id?: string | null;
+          is_caught_behind?: boolean;
           free_hit_next?: boolean;
           commentary?: string | null;
           created_at?: string;

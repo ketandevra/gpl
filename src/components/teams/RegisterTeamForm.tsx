@@ -40,7 +40,7 @@ export function RegisterTeamForm() {
         return;
       }
       if (data.request?.id) {
-        window.location.assign("/teams?requested=1");
+        window.location.assign("/tournaments?requested=1");
         return;
       }
       setError("Could not submit your request.");

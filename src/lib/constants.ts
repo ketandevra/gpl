@@ -1,6 +1,6 @@
 export const APP_NAME = "Ghanchi Premier League";
 export const APP_SHORT_NAME = "GPL";
-export const LOGO_PATH = "/brand/gpl-logo.jpg";
+export const LOGO_PATH = "/brand/gpl-logo.png";
 
 /** Default / fallback squad size when app_settings is unavailable. */
 export const DEFAULT_SQUAD_SIZE = 6;
@@ -12,18 +12,18 @@ export const NAV_ITEMS = [
   { href: "/", label: "Home" },
   { href: "/matches", label: "Matches" },
   { href: "/live", label: "Live" },
-  { href: "/teams", label: "Teams" },
+  { href: "/tournaments", label: "Tournament" },
   { href: "/players", label: "Players" },
   { href: "/stats", label: "Stats" },
   { href: "/profile", label: "Profile" },
 ] as const;
 
 /**
- * Primary bottom tabs for phones — Home, Team, Players, Profile.
+ * Primary bottom tabs for phones — Home, Tournament, Players, Profile.
  */
 export const MOBILE_NAV_ITEMS = [
   { href: "/", label: "Home", icon: "home" },
-  { href: "/teams", label: "Team", icon: "teams" },
+  { href: "/tournaments", label: "Tournament", icon: "tournament" },
   { href: "/players", label: "Players", icon: "players" },
   { href: "/profile", label: "Profile", icon: "profile" },
 ] as const;

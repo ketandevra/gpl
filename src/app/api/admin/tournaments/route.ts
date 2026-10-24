@@ -6,6 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { isSupabaseConfigured } from "@/lib/supabase/env";
 import {
   createTournamentSchema,
+  deleteTournamentSchema,
   updateTournamentSchema,
 } from "@/lib/validations/tournaments";
 
@@ -212,4 +213,81 @@ export async function PATCH(request: Request) {
   });
 
   return NextResponse.json({ tournament: data });
+}
+
+export async function DELETE(request: Request) {
+  const auth = await requireAdmin();
+  if ("error" in auth && auth.error) return auth.error;
+
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+  }
+
+  const parsed = deleteTournamentSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      { error: parsed.error.issues[0]?.message ?? "Invalid input." },
+      { status: 400 },
+    );
+  }
+
+  const { tournament_id } = parsed.data;
+  const admin = createAdminClient();
+
+  const { data: existing, error: loadError } = await admin
+    .from("tournaments")
+    .select("id, name, short_name, status, is_active")
+    .eq("id", tournament_id)
+    .maybeSingle();
+
+  if (loadError) {
+    return NextResponse.json(
+      { error: "Could not load tournament." },
+      { status: 500 },
+    );
+  }
+  if (!existing) {
+    return NextResponse.json({ error: "Tournament not found." }, { status: 404 });
+  }
+
+  // Matches reference teams without ON DELETE CASCADE, so they must go first.
+  const { error: matchError } = await admin
+    .from("matches")
+    .delete()
+    .eq("tournament_id", tournament_id);
+  if (matchError) {
+    return NextResponse.json(
+      { error: matchError.message || "Could not delete tournament matches." },
+      { status: 500 },
+    );
+  }
+
+  const { error } = await admin
+    .from("tournaments")
+    .delete()
+    .eq("id", tournament_id);
+  if (error) {
+    return NextResponse.json(
+      { error: error.message || "Could not delete tournament." },
+      { status: 500 },
+    );
+  }
+
+  await writeAuditLog({
+    actorId: auth.user.id,
+    action: "tournament.deleted",
+    entityType: "tournament",
+    entityId: tournament_id,
+    previousValue: {
+      name: existing.name,
+      short_name: existing.short_name,
+      status: existing.status,
+      is_active: existing.is_active,
+    },
+  });
+
+  return NextResponse.json({ ok: true });
 }

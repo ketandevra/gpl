@@ -54,7 +54,7 @@ export default async function TeamDetailPage({
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-8">
-      <BackLink href="/teams">All teams</BackLink>
+      <BackLink href="/tournaments">All tournaments</BackLink>
 
       {query.created ? (
         <p className="mt-4 rounded-xl border border-[#2aa7ad]/25 bg-[#2aa7ad]/10 px-4 py-3 text-sm text-[#1a7f84]">

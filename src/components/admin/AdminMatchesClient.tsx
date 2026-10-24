@@ -7,6 +7,13 @@ import type { MatchView } from "@/lib/matches/types";
 import { formatMatchWhen, matchStatusLabel } from "@/lib/matches/labels";
 import type { TeamRow } from "@/lib/teams/types";
 
+type TournamentOption = {
+  id: string;
+  name: string;
+  status: string;
+  is_active: boolean;
+};
+
 type ScorerUser = {
   id: string;
   name: string;
@@ -18,6 +25,7 @@ type AdminMatchesClientProps = {
   initialMatches: MatchView[];
   teams: TeamRow[];
   scorers: ScorerUser[];
+  tournaments: TournamentOption[];
 };
 
 function toLocalInputValue(iso: string | null): string {
@@ -32,6 +40,7 @@ export function AdminMatchesClient({
   initialMatches,
   teams,
   scorers,
+  tournaments,
 }: AdminMatchesClientProps) {
   const router = useRouter();
   const [matches, setMatches] = useState(initialMatches);
@@ -39,6 +48,7 @@ export function AdminMatchesClient({
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  const [tournamentId, setTournamentId] = useState("");
   const [teamA, setTeamA] = useState("");
   const [teamB, setTeamB] = useState("");
   const [scheduledAt, setScheduledAt] = useState("");
@@ -47,6 +57,11 @@ export function AdminMatchesClient({
   const [matchType, setMatchType] = useState("league");
   const [scorerIds, setScorerIds] = useState<string[]>([]);
 
+  const [resultFor, setResultFor] = useState<string | null>(null);
+  const [resultPick, setResultPick] = useState<"a" | "b" | "tie">("a");
+  const [resultMode, setResultMode] = useState<"complete" | "super_over">(
+    "complete",
+  );
   const [editId, setEditId] = useState<string | null>(null);
   const editing = useMemo(
     () => matches.find((m) => m.id === editId) ?? null,
@@ -59,8 +74,28 @@ export function AdminMatchesClient({
     );
   }
 
+  const tournamentTeams = useMemo(
+    () =>
+      tournamentId
+        ? teams.filter((team) => team.tournament_id === tournamentId)
+        : [],
+    [teams, tournamentId],
+  );
+  const selectedTournament = tournaments.find((t) => t.id === tournamentId);
+  const canCreateMatch =
+    Boolean(tournamentId) && selectedTournament?.status !== "completed";
+  const matchesByTournament = useMemo(() => {
+    return tournaments
+      .map((tournament) => ({
+        tournament,
+        matches: matches.filter((match) => match.tournament_id === tournament.id),
+      }))
+      .filter((group) => group.matches.length > 0);
+  }, [matches, tournaments]);
+
   function beginEdit(match: MatchView) {
     setEditId(match.id);
+    setTournamentId(match.tournament_id);
     setTeamA(match.team_a_id);
     setTeamB(match.team_b_id);
     setScheduledAt(toLocalInputValue(match.scheduled_at));
@@ -96,11 +131,16 @@ export function AdminMatchesClient({
 
   async function saveMatch(event: React.FormEvent) {
     event.preventDefault();
+    if (!editId && !canCreateMatch) {
+      setError("Select a tournament. Matches cannot be created without one.");
+      return;
+    }
     setBusy(true);
     setError(null);
     setMessage(null);
 
     const payload = {
+      tournament_id: tournamentId,
       team_a_id: teamA,
       team_b_id: teamB,
       scheduled_at: scheduledAt,
@@ -182,23 +222,38 @@ export function AdminMatchesClient({
     }
   }
 
-  function completeMatch(match: MatchView) {
-    const result = window.prompt(
-      "Result text (e.g. Pali Warriors won by 18 runs)",
-      match.result_text ?? "",
-    );
-    if (result === null) return;
-    const winner = window.prompt(
-      `Winner team id (A=${match.team_a_id.slice(0, 8)}… or B=${match.team_b_id.slice(0, 8)}…)\nEnter A or B`,
-      "A",
-    );
-    if (winner === null) return;
-    const winner_team_id =
-      winner.toUpperCase() === "B" ? match.team_b_id : match.team_a_id;
-    void runAction(match.id, "complete", {
-      result_text: result || null,
-      winner_team_id,
-    });
+  function openResult(match: MatchView, mode: "complete" | "super_over") {
+    setResultFor(match.id);
+    setResultMode(mode);
+    setResultPick(mode === "super_over" ? "a" : match.winner_team_id === match.team_b_id ? "b" : "a");
+  }
+
+  function submitResult(match: MatchView) {
+    if (resultMode === "super_over") {
+      const winner_team_id =
+        resultPick === "b" ? match.team_b_id : match.team_a_id;
+      const winnerName =
+        resultPick === "b" ? match.team_b?.name : match.team_a?.name;
+      void runAction(match.id, "super_over", {
+        winner_team_id,
+        result_text: `${winnerName} won in Super Over`,
+      });
+    } else if (resultPick === "tie") {
+      void runAction(match.id, "complete", {
+        winner_team_id: null,
+        result_text: "Match tied",
+      });
+    } else {
+      const winner_team_id =
+        resultPick === "b" ? match.team_b_id : match.team_a_id;
+      const winnerName =
+        resultPick === "b" ? match.team_b?.name : match.team_a?.name;
+      void runAction(match.id, "complete", {
+        winner_team_id,
+        result_text: `${winnerName} won`,
+      });
+    }
+    setResultFor(null);
   }
 
   function startMatch(match: MatchView) {
@@ -245,6 +300,52 @@ export function AdminMatchesClient({
         <h2 className="font-semibold text-[#3e2723]">
           {editId ? "Edit match" : "Create match"}
         </h2>
+        {tournaments.length === 0 ? (
+          <p className="text-sm text-[#9f1239]">
+            Create a tournament in Admin → Tournaments first. Matches cannot be
+            created without a tournament.
+          </p>
+        ) : null}
+
+        <label className="block text-sm">
+          <span className="mb-1 block text-[#3e2723]/65">Tournament</span>
+          <select
+            required
+            value={tournamentId}
+            disabled={Boolean(editId)}
+            onChange={(e) => {
+              setTournamentId(e.target.value);
+              setTeamA("");
+              setTeamB("");
+            }}
+            className="field-select"
+          >
+            <option value="">Select tournament</option>
+            {tournaments.map((t) => (
+              <option key={t.id} value={t.id} disabled={t.status === "completed"}>
+                {t.name}
+                {t.is_active ? " · Active" : ""}
+                {t.status === "completed" ? " · Completed" : ""}
+              </option>
+            ))}
+          </select>
+        </label>
+        {!tournamentId && tournaments.length > 0 ? (
+          <p className="text-sm text-[#8a6500]">
+            Select a tournament to create a match. Matches cannot be created
+            without one.
+          </p>
+        ) : null}
+        {selectedTournament?.status === "completed" ? (
+          <p className="text-sm text-[#9f1239]">
+            This tournament is completed. New matches cannot be added.
+          </p>
+        ) : null}
+        {tournamentId && canCreateMatch && tournamentTeams.length === 0 ? (
+          <p className="text-sm text-[#9f1239]">
+            No teams in this tournament yet. Add teams in Admin → Teams first.
+          </p>
+        ) : null}
 
         <div className="grid gap-3 sm:grid-cols-2">
           <label className="block text-sm">
@@ -253,13 +354,18 @@ export function AdminMatchesClient({
               required
               value={teamA}
               onChange={(e) => setTeamA(e.target.value)}
-              disabled={Boolean(editId && editing?.status !== "scheduled")}
+              disabled={
+                !tournamentId ||
+                (!editId && selectedTournament?.status === "completed") ||
+                Boolean(editId && editing?.status !== "scheduled")
+              }
               className="field-select"
             >
               <option value="">Select team</option>
-              {teams.map((t) => (
+              {tournamentTeams.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}
+                  {t.registration_status !== "approved" ? " (pending)" : ""}
                 </option>
               ))}
             </select>
@@ -270,13 +376,18 @@ export function AdminMatchesClient({
               required
               value={teamB}
               onChange={(e) => setTeamB(e.target.value)}
-              disabled={Boolean(editId && editing?.status !== "scheduled")}
+              disabled={
+                !tournamentId ||
+                (!editId && selectedTournament?.status === "completed") ||
+                Boolean(editId && editing?.status !== "scheduled")
+              }
               className="field-select"
             >
               <option value="">Select team</option>
-              {teams.map((t) => (
+              {tournamentTeams.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}
+                  {t.registration_status !== "approved" ? " (pending)" : ""}
                 </option>
               ))}
             </select>
@@ -364,7 +475,7 @@ export function AdminMatchesClient({
         <div className="flex flex-wrap gap-2 pt-1">
           <button
             type="submit"
-            disabled={busy}
+            disabled={busy || (!editId && !canCreateMatch)}
             className="rounded-full bg-[#2aa7ad] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
           >
             {busy ? "Saving…" : editId ? "Save changes" : "Create match"}
@@ -381,8 +492,14 @@ export function AdminMatchesClient({
         </div>
       </form>
 
-      <ul className="mt-8 space-y-3">
-        {matches.map((match) => (
+      <div className="mt-8 space-y-8">
+        {matchesByTournament.map(({ tournament, matches: group }) => (
+          <section key={tournament.id}>
+            <h2 className="mb-3 text-sm font-bold uppercase tracking-wide text-[#1a7f84]">
+              {tournament.name}
+            </h2>
+            <ul className="space-y-3">
+              {group.map((match) => (
           <li
             key={match.id}
             className="rounded-2xl border border-[#3e2723]/10 bg-white p-4 shadow-sm"
@@ -451,11 +568,31 @@ export function AdminMatchesClient({
                 <button
                   type="button"
                   disabled={busy}
-                  onClick={() => completeMatch(match)}
+                  onClick={() => openResult(match, "complete")}
                   className="rounded-full bg-[#2aa7ad] px-3 py-1.5 text-xs font-semibold text-white"
                 >
                   Complete
                 </button>
+              ) : null}
+              {match.status === "completed" && !match.winner_team_id ? (
+                <>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => openResult(match, "super_over")}
+                    className="rounded-full bg-[#2aa7ad] px-3 py-1.5 text-xs font-semibold text-white"
+                  >
+                    Super Over winner
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => runAction(match.id, "start_super_over")}
+                    className="rounded-full bg-[#d81b60] px-3 py-1.5 text-xs font-semibold text-white"
+                  >
+                    Start Super Over
+                  </button>
+                </>
               ) : null}
               {!["completed", "abandoned"].includes(match.status) ? (
                 <button
@@ -468,9 +605,69 @@ export function AdminMatchesClient({
                 </button>
               ) : null}
             </div>
+            {resultFor === match.id ? (
+              <div className="mt-3 space-y-2 rounded-xl border border-[#2aa7ad]/25 bg-[#f4fbfb] p-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[#1a7f84]">
+                  {resultMode === "super_over"
+                    ? "Who won the Super Over?"
+                    : "Match result"}
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {(
+                    [
+                      ["a", match.team_a?.short_name ?? "A"],
+                      ["b", match.team_b?.short_name ?? "B"],
+                      ...(resultMode === "complete"
+                        ? ([["tie", "Tied"]] as const)
+                        : []),
+                    ] as const
+                  ).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => setResultPick(id)}
+                      className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
+                        resultPick === id
+                          ? "bg-[#2aa7ad] text-white"
+                          : "bg-white text-[#3e2723]"
+                      }`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-[#3e2723]/55">
+                  {resultMode === "super_over"
+                    ? "Same as international T20: Super Over decides the winner."
+                    : resultPick === "tie"
+                      ? "Scores finish level. League matches share points, or start a Super Over next."
+                      : "Award the match to this team."}
+                </p>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => submitResult(match)}
+                    className="rounded-full bg-[#2aa7ad] px-3 py-1.5 text-xs font-semibold text-white"
+                  >
+                    Save result
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setResultFor(null)}
+                    className="rounded-full border border-[#3e2723]/15 px-3 py-1.5 text-xs font-semibold text-[#3e2723]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : null}
           </li>
+              ))}
+            </ul>
+          </section>
         ))}
-      </ul>
+      </div>
 
       {matches.length === 0 ? (
         <p className="mt-6 text-sm text-[#3e2723]/60">No matches yet.</p>

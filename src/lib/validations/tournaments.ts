@@ -48,3 +48,7 @@ export const updateTournamentSchema = z.object({
   status: z.enum(["upcoming", "ongoing", "completed"]).optional(),
   is_active: z.boolean().optional(),
 });
+
+export const deleteTournamentSchema = z.object({
+  tournament_id: z.string().uuid(),
+});

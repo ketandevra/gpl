@@ -140,6 +140,7 @@ export function AdminPlayersClient({ players: initial }: Props) {
             key={player.id}
             player={player}
             href={`/players/${player.id}`}
+            showMobile
             statusLine={
               player.locked_team_id
                 ? player.team_name

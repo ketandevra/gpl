@@ -28,11 +28,18 @@ export type TeamBrief = {
   short_name: string;
 };
 
+export type TournamentBrief = {
+  id: string;
+  name: string;
+  short_name: string | null;
+};
+
 export type MatchView = MatchRow & {
   team_a: TeamBrief | null;
   team_b: TeamBrief | null;
   toss_winner: TeamBrief | null;
   winner: TeamBrief | null;
+  tournament: TournamentBrief | null;
 };
 
 export type InningsBrief = {

@@ -130,7 +130,7 @@ export function PlayerIdCard({
                 alt=""
                 width={40}
                 height={40}
-                className="h-10 w-10 shrink-0 rounded-full object-cover object-[center_35%] shadow-sm ring-2 ring-[#f5b830]"
+                className="h-10 w-10 shrink-0 object-contain"
               />
               <p className="whitespace-nowrap text-[18px] font-extrabold leading-none tracking-tight text-[#f5b830]">
                 Ghanchi Premier League

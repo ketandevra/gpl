@@ -41,6 +41,7 @@ export type InningsForPoints = {
   match_id: string;
   batting_team_id: string;
   bowling_team_id: string;
+  innings_number: number;
   total_runs: number;
   wickets: number;
   legal_balls: number;
@@ -183,7 +184,9 @@ export function buildPointsTable(input: {
     }
 
     const matchInnings = (inningsByMatch.get(match.id) ?? []).filter(
-      (i) => i.status === "completed" || i.legal_balls > 0 || i.total_runs > 0,
+      (i) =>
+        (i.innings_number ?? 1) < 3 &&
+        (i.status === "completed" || i.legal_balls > 0 || i.total_runs > 0),
     );
 
     for (const inn of matchInnings) {

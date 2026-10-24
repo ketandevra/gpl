@@ -17,8 +17,7 @@ import {
 import {
   getActiveTournament,
   getManagerName,
-  listAllTeams,
-  listPlayersByTeam,
+  listAdminTeamSummaries,
 } from "@/lib/teams/queries";
 import {
   adminCreateTeamSchema,
@@ -45,29 +44,18 @@ export async function GET() {
   }
 
   const [teams, tournament] = await Promise.all([
-    listAllTeams(),
+    listAdminTeamSummaries(),
     getActiveTournament(),
   ]);
-  const [enriched, owner_requests] = await Promise.all([
-    Promise.all(
-      teams.map(async (team) => {
-        const [manager_name, players] = await Promise.all([
-          getManagerName(team.manager_id),
-          listPlayersByTeam(team.id),
-        ]);
-        return {
-          ...team,
-          manager_name,
-          captain_name: manager_name,
-          player_count: players.length,
-          players,
-        };
-      }),
-    ),
-    listPendingOwnerRequests(tournament?.id),
-  ]);
+  const owner_requests = await listPendingOwnerRequests(tournament?.id);
 
-  return NextResponse.json({ teams: enriched, owner_requests });
+  return NextResponse.json({
+    teams: teams.map((team) => ({
+      ...team,
+      captain_name: team.manager_name,
+    })),
+    owner_requests,
+  });
 }
 
 export async function POST(request: Request) {

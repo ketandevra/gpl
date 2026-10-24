@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { BrandLogo } from "@/components/brand/BrandLogo";
 
 function toTitleCase(value: string): string {
   return value.replace(
@@ -127,6 +128,9 @@ export function AuthForm({
   if (mode === "register" && !registrationOpen) {
     return (
       <div className="rounded-2xl border border-[#3e2723]/10 bg-white p-6 shadow-sm">
+        <div className="mb-4 flex justify-center">
+          <BrandLogo variant="full" href="/" />
+        </div>
         <h1 className="text-2xl font-bold text-[#3e2723]">Registration closed</h1>
         <p className="mt-3 text-sm text-[#3e2723]/70">
           Public registration is not open right now. Ask a GPL admin to enable
@@ -148,6 +152,9 @@ export function AuthForm({
       noValidate
       className="rounded-2xl border border-[#3e2723]/10 bg-white p-6 shadow-sm"
     >
+      <div className="mb-4 flex justify-center">
+        <BrandLogo variant="full" href="/" />
+      </div>
       <h1 className="text-2xl font-bold text-[#3e2723]">
         {mode === "login" ? "Login" : "Create account"}
       </h1>

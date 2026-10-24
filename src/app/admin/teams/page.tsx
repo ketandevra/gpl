@@ -1,12 +1,8 @@
 import { AdminTeamsClient } from "@/components/admin/AdminTeamsClient";
 import { getSquadSize } from "@/lib/settings/app";
-import {
-  getActiveTournament,
-  getManagerName,
-  listAllTeams,
-  listPlayersByTeam,
-} from "@/lib/teams/queries";
+import { getActiveTournament, listAdminTeamSummaries } from "@/lib/teams/queries";
 import { listPendingOwnerRequests } from "@/lib/teams/owner-requests";
+import { listAllTournaments } from "@/lib/tournaments/queries";
 import { isSupabaseAdminConfigured } from "@/lib/supabase/env";
 
 export const metadata = { title: "Admin · Teams" };
@@ -24,33 +20,37 @@ export default async function AdminTeamsPage() {
     );
   }
 
-  const [teams, tournament] = await Promise.all([
-    listAllTeams(),
-    getActiveTournament(),
-  ]);
-  const [enriched, ownerRequests] = await Promise.all([
-    Promise.all(
-      teams.map(async (team) => {
-        const [manager_name, players] = await Promise.all([
-          getManagerName(team.manager_id),
-          listPlayersByTeam(team.id),
-        ]);
-        return {
-          ...team,
-          manager_name,
-          player_count: players.length,
-          players,
-        };
-      }),
-    ),
-    listPendingOwnerRequests(tournament?.id),
-  ]);
+  try {
+    const [teams, tournament, squadSize, tournaments] = await Promise.all([
+      listAdminTeamSummaries(),
+      getActiveTournament(),
+      getSquadSize(),
+      listAllTournaments(),
+    ]);
+    const ownerRequests = await listPendingOwnerRequests();
 
-  return (
-    <AdminTeamsClient
-      teams={enriched}
-      ownerRequests={ownerRequests}
-      squadSize={await getSquadSize()}
-    />
-  );
+    return (
+      <AdminTeamsClient
+        teams={teams}
+        ownerRequests={ownerRequests}
+        squadSize={squadSize}
+        tournaments={tournaments.map((row) => ({
+          id: row.id,
+          name: row.name,
+          status: row.status,
+          is_active: row.is_active,
+        }))}
+        defaultTournamentId={tournament?.id ?? tournaments[0]?.id ?? ""}
+      />
+    );
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "Could not load teams.";
+    return (
+      <div className="px-4 py-8 lg:px-8">
+        <h1 className="text-2xl font-bold text-[#3e2723]">Teams</h1>
+        <p className="mt-3 text-sm text-[#9f1239]">{message}</p>
+      </div>
+    );
+  }
 }

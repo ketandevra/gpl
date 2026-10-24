@@ -29,7 +29,12 @@ export default async function ScoreMatchPage({ params }: PageProps) {
   const board = await getScoreboard(matchId, user);
   if (!board) notFound();
 
-  const scorable = LIVE_MATCH_STATUSES.includes(board.match.status);
+  const tied =
+    !board.match.winner_team_id &&
+    (board.match.status === "completed" ||
+      (board.match.result_text ?? "").toLowerCase().includes("tied"));
+  const scorable =
+    LIVE_MATCH_STATUSES.includes(board.match.status) || tied;
 
   return (
     <div className="mx-auto max-w-lg px-4 py-6 pb-24">

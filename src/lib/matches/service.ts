@@ -1,7 +1,8 @@
 import { writeAuditLog } from "@/lib/auth/audit";
 import type { SessionUser } from "@/lib/auth/permissions";
 import { adminRest, RestError, withRetry } from "@/lib/supabase/rest";
-import { getActiveTournament } from "@/lib/teams/queries";
+import { getTeamById } from "@/lib/teams/queries";
+import { getTournamentById } from "@/lib/tournaments/queries";
 import {
   getMatchById,
   listMatchScorerIds,
@@ -45,9 +46,33 @@ export async function createMatch(
   adminUser: SessionUser,
   input: CreateInput,
 ): Promise<{ match: MatchView } | { error: string; status: number }> {
-  const tournament = await getActiveTournament();
+  if (!input.tournament_id) {
+    return { error: "Select a tournament. Matches cannot be created without one.", status: 400 };
+  }
+
+  const tournament = await getTournamentById(input.tournament_id);
   if (!tournament) {
-    return { error: "No active tournament found.", status: 400 };
+    return { error: "Tournament not found.", status: 400 };
+  }
+  if (tournament.status === "completed") {
+    return { error: "Cannot add matches to a completed tournament.", status: 400 };
+  }
+
+  const [teamA, teamB] = await Promise.all([
+    getTeamById(input.team_a_id),
+    getTeamById(input.team_b_id),
+  ]);
+  if (!teamA || !teamB) {
+    return { error: "Both teams must exist.", status: 400 };
+  }
+  if (
+    teamA.tournament_id !== tournament.id ||
+    teamB.tournament_id !== tournament.id
+  ) {
+    return {
+      error: "Both teams must belong to the selected tournament.",
+      status: 400,
+    };
   }
 
   try {
@@ -214,9 +239,59 @@ export async function applyMatchAction(
         return { error: "This match cannot be completed from its current status.", status: 400 };
       }
       nextStatus = "completed";
-      if (input.winner_team_id) patch.winner_team_id = input.winner_team_id;
-      if (input.result_text) patch.result_text = input.result_text;
+      if (input.winner_team_id !== undefined) {
+        patch.winner_team_id = input.winner_team_id;
+      }
+      if (input.result_text !== undefined) {
+        patch.result_text = input.result_text || (input.winner_team_id ? null : "Match tied");
+      } else if (!input.winner_team_id) {
+        patch.result_text = "Match tied";
+      }
       break;
+    case "super_over": {
+      const tied =
+        existing.status === "completed" && !existing.winner_team_id;
+      if (!tied) {
+        return {
+          error: "Super Over can only be awarded after a tied match.",
+          status: 400,
+        };
+      }
+      if (
+        !input.winner_team_id ||
+        (input.winner_team_id !== existing.team_a_id &&
+          input.winner_team_id !== existing.team_b_id)
+      ) {
+        return { error: "Pick the Super Over winner.", status: 400 };
+      }
+      nextStatus = "completed";
+      patch.winner_team_id = input.winner_team_id;
+      const winnerName =
+        input.winner_team_id === existing.team_a_id
+          ? existing.team_a?.name
+          : existing.team_b?.name;
+      patch.result_text =
+        input.result_text?.trim() || `${winnerName} won in Super Over`;
+      break;
+    }
+    case "start_super_over": {
+      const resultTied = (existing.result_text ?? "")
+        .toLowerCase()
+        .includes("tied");
+      const tied =
+        (!existing.winner_team_id && existing.status === "completed") ||
+        resultTied;
+      if (!tied) {
+        return {
+          error: "Only a tied match can start a Super Over.",
+          status: 400,
+        };
+      }
+      nextStatus = "live";
+      patch.winner_team_id = null;
+      patch.result_text = "Super Over";
+      break;
+    }
     case "abandon":
       if (["completed", "abandoned"].includes(existing.status)) {
         return { error: "Match is already finished.", status: 400 };

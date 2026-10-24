@@ -1,6 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
-import { APP_NAME } from "@/lib/constants";
+import { APP_NAME, LOGO_PATH } from "@/lib/constants";
 
 type BrandLogoProps = {
   /** Compact mark for sticky headers */
@@ -20,23 +20,23 @@ export function BrandLogo({
   const image =
     variant === "full" ? (
       <Image
-        src="/brand/gpl-logo.jpg"
+        src={LOGO_PATH}
         alt={APP_NAME}
         width={1024}
-        height={1000}
+        height={1024}
         priority={priority}
-        className={`h-auto w-full max-w-[112px] object-contain sm:max-w-[128px] ${className}`}
-        sizes="(max-width: 640px) 112px, 128px"
+        className={`h-auto w-full max-w-[148px] object-contain sm:max-w-[176px] ${className}`}
+        sizes="(max-width: 640px) 148px, 176px"
       />
     ) : (
       <Image
-        src="/brand/gpl-logo.jpg"
+        src={LOGO_PATH}
         alt={APP_NAME}
-        width={64}
-        height={62}
+        width={96}
+        height={96}
         priority={priority}
-        className={`h-8 w-8 rounded-full object-cover object-[center_35%] ring-2 ring-[#f5b830]/80 sm:h-9 sm:w-9 ${className}`}
-        sizes="36px"
+        className={`h-10 w-10 rounded-full object-cover sm:h-11 sm:w-11 ${className}`}
+        sizes="44px"
       />
     );
 

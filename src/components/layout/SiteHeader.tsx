@@ -15,6 +15,11 @@ type SiteHeaderProps = {
 
 function isNavActive(href: string, pathname: string) {
   if (href === "/") return pathname === "/";
+  if (href === "/tournaments") {
+    return (
+      pathname.startsWith("/tournaments") || pathname.startsWith("/teams")
+    );
+  }
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -54,8 +59,8 @@ export function SiteHeader({
               {onAdmin
                 ? "Admin console"
                 : hasLive
-                  ? "Live now · Teams · Players"
-                  : "Teams · Players · Profile"}
+                  ? "Live now · Tournaments · Players"
+                  : "Tournaments · Players · Profile"}
             </p>
           </div>
         </div>

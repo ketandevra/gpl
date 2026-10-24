@@ -1,6 +1,7 @@
 import { AdminMatchesClient } from "@/components/admin/AdminMatchesClient";
 import { listMatches, listScorerUsers } from "@/lib/matches/queries";
-import { listApprovedTeams } from "@/lib/teams/queries";
+import { listMatchableTeams } from "@/lib/teams/queries";
+import { listAllTournaments } from "@/lib/tournaments/queries";
 import { isSupabaseAdminConfigured } from "@/lib/supabase/env";
 
 export const metadata = { title: "Admin · Matches" };
@@ -18,10 +19,11 @@ export default async function AdminMatchesPage() {
     );
   }
 
-  const [matches, teams, scorers] = await Promise.all([
+  const [matches, teams, scorers, tournaments] = await Promise.all([
     listMatches(),
-    listApprovedTeams(),
+    listMatchableTeams(),
     listScorerUsers(),
+    listAllTournaments(),
   ]);
 
   return (
@@ -29,6 +31,7 @@ export default async function AdminMatchesPage() {
       initialMatches={matches}
       teams={teams}
       scorers={scorers}
+      tournaments={tournaments}
     />
   );
 }

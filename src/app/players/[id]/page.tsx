@@ -2,7 +2,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BackLink } from "@/components/ui/BackLink";
 import { UserAvatar } from "@/components/ui/UserAvatar";
-import { getPlayerStats } from "@/lib/stats";
+import { VerifiedBadge } from "@/components/ui/VerifiedBadge";
+import { getCurrentUser } from "@/lib/auth/session";
+import { canAccessAdmin } from "@/lib/auth/permissions";
+import { getCareerStats } from "@/lib/stats";
 import {
   formatPlayerLabel,
   getPlayerById,
@@ -12,6 +15,7 @@ import {
 } from "@/lib/teams/queries";
 import { adminRest, withRetry } from "@/lib/supabase/rest";
 import { isSupabaseAdminConfigured } from "@/lib/supabase/env";
+import { formatAadhaarInput } from "@/lib/verification/helpers";
 
 type PageProps = {
   params: Promise<{ id: string }>;
@@ -43,16 +47,21 @@ export default async function PlayerDetailPage({ params, searchParams }: PagePro
   const { id } = await params;
   const { from } = await searchParams;
   const backToTeam = teamReturnPath(from);
-  const player = await getPlayerById(id);
+  const [player, viewer] = await Promise.all([
+    getPlayerById(id),
+    getCurrentUser(),
+  ]);
   if (!player) notFound();
+  const isAdmin = canAccessAdmin(viewer);
 
   const lockedTeam = player.locked_team_id
     ? await getTeamById(player.locked_team_id)
     : null;
 
-  const stats = isSupabaseAdminConfigured()
-    ? await getPlayerStats(id).catch(() => null)
+  const career = isSupabaseAdminConfigured()
+    ? await getCareerStats(id).catch(() => null)
     : null;
+  const stats = career?.career ?? null;
 
   const squadTeams: Array<{
     id: string;
@@ -63,6 +72,9 @@ export default async function PlayerDetailPage({ params, searchParams }: PagePro
     jersey_number: number | null;
   }> = [];
   let avatarUrl: string | null = player.photo_url;
+  let verified = false;
+  let mobileNumber = player.mobile_number;
+  let aadhaarNumber: string | null = null;
 
   if (isSupabaseAdminConfigured()) {
     const memberships = await withRetry(() =>
@@ -89,11 +101,25 @@ export default async function PlayerDetailPage({ params, searchParams }: PagePro
 
     if (player.user_id) {
       const users = await withRetry(() =>
-        adminRest<Array<{ avatar_url: string | null }>>("users", {
-          query: `?id=eq.${encodeURIComponent(player.user_id!)}&select=avatar_url&limit=1`,
+        adminRest<
+          Array<{
+            avatar_url: string | null;
+            verification_status: string;
+            mobile_number: string | null;
+            aadhaar_number: string | null;
+          }>
+        >("users", {
+          query: `?id=eq.${encodeURIComponent(player.user_id!)}&select=${
+            isAdmin
+              ? "avatar_url,verification_status,mobile_number,aadhaar_number"
+              : "avatar_url,verification_status"
+          }&limit=1`,
         }),
       );
       avatarUrl = users[0]?.avatar_url ?? player.photo_url;
+      verified = users[0]?.verification_status === "verified";
+      mobileNumber = users[0]?.mobile_number ?? player.mobile_number;
+      aadhaarNumber = users[0]?.aadhaar_number ?? null;
     }
   }
 
@@ -101,6 +127,15 @@ export default async function PlayerDetailPage({ params, searchParams }: PagePro
     squadTeams.find((t) => t.approved)?.jersey_number ??
     squadTeams[0]?.jersey_number ??
     null;
+  const otherSquads = squadTeams.filter((team) => team.id !== lockedTeam?.id);
+  const hasDetails = Boolean(
+    player.tshirt_size ||
+      player.batting_style ||
+      player.bowling_style ||
+      lockedTeam ||
+      squadTeams.length ||
+      (isAdmin && (mobileNumber || aadhaarNumber)),
+  );
 
   return (
     <div className="mx-auto max-w-lg px-4 py-8">
@@ -108,14 +143,20 @@ export default async function PlayerDetailPage({ params, searchParams }: PagePro
         {backToTeam ? "Back to team" : "All players"}
       </BackLink>
 
-      <div className="mt-5 flex flex-col items-center gap-3 rounded-2xl border border-[#3e2723]/10 bg-white p-6 shadow-sm">
+      <div
+        className={`mt-5 flex flex-col items-center gap-3 rounded-2xl bg-white p-6 shadow-sm ${
+          verified
+            ? "border border-[#22c55e]/25"
+            : "border border-[#3e2723]/10"
+        }`}
+      >
         <UserAvatar
           name={player.name}
           src={avatarUrl}
           size="lg"
           className="border-2 border-[#2aa7ad]/30 shadow-sm"
         />
-        <h1 className="text-center text-2xl font-bold text-[#3e2723]">
+        <h1 className="text-center text-2xl font-bold leading-tight text-[#3e2723]">
           {player.name}
         </h1>
         <p className="text-sm font-semibold tracking-wide text-[#1a7f84]">
@@ -125,111 +166,109 @@ export default async function PlayerDetailPage({ params, searchParams }: PagePro
         <p className="text-sm text-[#3e2723]/65">
           {playerRoleLabel(player.role)}
         </p>
+        {verified ? <VerifiedBadge className="mt-1" /> : null}
       </div>
 
-      <dl className="mt-4 space-y-3 rounded-2xl border border-[#3e2723]/10 bg-white p-5 shadow-sm">
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-[#3e2723]/45">
-            Player ID
-          </dt>
-          <dd className="mt-1 font-medium text-[#3e2723]">{player.public_code}</dd>
-        </div>
+      {hasDetails ? (
+        <dl className="mt-4 space-y-3 rounded-2xl border border-[#3e2723]/10 bg-white p-5 shadow-sm">
+          {isAdmin && mobileNumber ? (
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-[#3e2723]/45">
+                Mobile
+              </dt>
+              <dd className="mt-1 font-medium tabular-nums text-[#3e2723]">
+                {mobileNumber}
+              </dd>
+            </div>
+          ) : null}
 
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-[#3e2723]/45">
-            Playing role
-          </dt>
-          <dd className="mt-1 font-medium text-[#3e2723]">
-            {playerRoleLabel(player.role)}
-          </dd>
-        </div>
+          {isAdmin ? (
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-[#3e2723]/45">
+                Aadhaar
+              </dt>
+              <dd className="mt-1 font-medium tabular-nums text-[#3e2723]">
+                {aadhaarNumber
+                  ? formatAadhaarInput(aadhaarNumber)
+                  : "Not on file"}
+              </dd>
+            </div>
+          ) : null}
 
-        {player.tshirt_size ? (
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-[#3e2723]/45">
-              T-shirt size
-            </dt>
-            <dd className="mt-1 font-medium text-[#3e2723]">
-              {player.tshirt_size}
-            </dd>
-          </div>
-        ) : null}
+          {player.tshirt_size ? (
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-[#3e2723]/45">
+                T-shirt size
+              </dt>
+              <dd className="mt-1 font-medium text-[#3e2723]">
+                {player.tshirt_size}
+              </dd>
+            </div>
+          ) : null}
 
-        {player.batting_style ? (
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-[#3e2723]/45">
-              Batting style
-            </dt>
-            <dd className="mt-1 font-medium text-[#3e2723]">
-              {player.batting_style}
-            </dd>
-          </div>
-        ) : null}
+          {player.batting_style ? (
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-[#3e2723]/45">
+                Batting style
+              </dt>
+              <dd className="mt-1 font-medium text-[#3e2723]">
+                {player.batting_style}
+              </dd>
+            </div>
+          ) : null}
 
-        {player.bowling_style ? (
-          <div>
-            <dt className="text-xs uppercase tracking-wide text-[#3e2723]/45">
-              Bowling style
-            </dt>
-            <dd className="mt-1 font-medium text-[#3e2723]">
-              {player.bowling_style}
-            </dd>
-          </div>
-        ) : null}
+          {player.bowling_style ? (
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-[#3e2723]/45">
+                Bowling style
+              </dt>
+              <dd className="mt-1 font-medium text-[#3e2723]">
+                {player.bowling_style}
+              </dd>
+            </div>
+          ) : null}
 
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-[#3e2723]/45">
-            Official team
-          </dt>
-          <dd className="mt-1">
-            {lockedTeam ? (
-              <Link
-                href={`/teams/${lockedTeam.id}`}
-                className="font-medium text-[#1a7f84] hover:underline"
-              >
-                {lockedTeam.name} ({lockedTeam.short_name})
-              </Link>
-            ) : (
-              <span className="text-[#3e2723]/60">
-                Not locked to an approved team
-              </span>
-            )}
-          </dd>
-        </div>
-
-        <div>
-          <dt className="text-xs uppercase tracking-wide text-[#3e2723]/45">
-            Squad
-          </dt>
-          <dd className="mt-1">
-            {squadTeams.length ? (
-              <ul className="space-y-2">
-                {squadTeams.map((t) => (
-                  <li key={t.id}>
-                    <Link
-                      href={`/teams/${t.id}`}
-                      className="font-medium text-[#1a7f84] hover:underline"
-                    >
-                      {t.name} ({t.short_name})
-                    </Link>
-                    <span className="ml-1.5 text-xs text-[#3e2723]/55">
-                      {teamStatusLabel(t.registration_status as never)}
-                      {t.jersey_number != null ? ` · #${t.jersey_number}` : ""}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <span className="text-[#3e2723]/60">Not in a squad yet</span>
-            )}
-          </dd>
-        </div>
-      </dl>
+          {lockedTeam || squadTeams.length ? (
+            <div>
+              <dt className="text-xs uppercase tracking-wide text-[#3e2723]/45">
+                Team
+              </dt>
+              <dd className="mt-1">
+                <ul className="space-y-2">
+                  {lockedTeam ? (
+                    <li>
+                      <Link
+                        href={`/teams/${lockedTeam.id}`}
+                        className="font-medium text-[#1a7f84] hover:underline"
+                      >
+                        {lockedTeam.name} ({lockedTeam.short_name})
+                      </Link>
+                    </li>
+                  ) : null}
+                  {otherSquads.map((team) => (
+                    <li key={team.id}>
+                      <Link
+                        href={`/teams/${team.id}`}
+                        className="font-medium text-[#1a7f84] hover:underline"
+                      >
+                        {team.name} ({team.short_name})
+                      </Link>
+                      <span className="ml-1.5 text-xs text-[#3e2723]/55">
+                        {teamStatusLabel(team.registration_status as never)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </dd>
+            </div>
+          ) : null}
+        </dl>
+      ) : null}
 
       <section className="mt-4 rounded-2xl border border-[#3e2723]/10 bg-white p-5 shadow-sm">
-        <h2 className="text-lg font-semibold text-[#3e2723]">Match stats</h2>
+        <h2 className="text-lg font-semibold text-[#3e2723]">Career stats</h2>
         <p className="mt-1 text-xs text-[#3e2723]/50">
-          Active tournament performance
+          All GPL editions this player has scored in
         </p>
 
         {!stats || (!stats.has_batting && !stats.has_bowling) ? (
@@ -312,6 +351,35 @@ export default async function PlayerDetailPage({ params, searchParams }: PagePro
             </div>
           </div>
         )}
+
+        {career && career.editions.length > 1 ? (
+          <ul className="mt-4 space-y-2">
+            {career.editions.map((edition) => (
+              <li
+                key={edition.player_id}
+                className="rounded-xl border border-[#3e2723]/8 bg-[#fdf6e8]/70 px-3 py-2 text-sm"
+              >
+                <p className="font-semibold text-[#3e2723]">
+                  {edition.tournament_name}
+                </p>
+                <p className="text-xs text-[#3e2723]/55">
+                  {edition.stats.has_batting
+                    ? `${edition.stats.batting.runs} runs`
+                    : ""}
+                  {edition.stats.has_batting && edition.stats.has_bowling
+                    ? " · "
+                    : ""}
+                  {edition.stats.has_bowling
+                    ? `${edition.stats.bowling.wickets} wkts`
+                    : ""}
+                  {!edition.stats.has_batting && !edition.stats.has_bowling
+                    ? "No scored matches yet"
+                    : ""}
+                </p>
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </section>
     </div>
   );

@@ -3,7 +3,7 @@ import {
   formatTournamentDates,
   tournamentStatusLabel,
   type PublicTournament,
-} from "@/lib/tournaments/queries";
+} from "@/lib/tournaments/labels";
 
 type Props = {
   tournaments: PublicTournament[];
@@ -17,16 +17,19 @@ export function HomeTournaments({ tournaments }: Props) {
       <div className="mb-3 flex items-end justify-between gap-2">
         <h2 className="text-lg font-semibold text-[#3e2723]">Tournaments</h2>
         <Link
-          href="/teams"
+          href="/tournaments"
           className="text-sm font-semibold text-[#1a7f84] hover:underline"
         >
-          View teams
+          View tournaments
         </Link>
       </div>
       <ul className="grid gap-3 sm:grid-cols-2">
         {tournaments.map((t) => {
           const dates = formatTournamentDates(t.start_date, t.end_date);
-          const href = t.registration_open ? "/teams" : "/matches";
+          const href =
+            t.status === "completed"
+              ? "/tournaments?tab=past"
+              : "/tournaments";
           const statusTone =
             t.status === "ongoing"
               ? "bg-[#2aa7ad]/12 text-[#1a7f84]"

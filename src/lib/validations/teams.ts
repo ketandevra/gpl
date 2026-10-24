@@ -30,6 +30,7 @@ export const adminCreateTeamSchema = z.object({
     .max(6)
     .transform((v) => v.toUpperCase()),
   captain_id: z.string().uuid("Select a captain."),
+  tournament_id: z.string().uuid().optional(),
 });
 
 /** Verified player requests to become a team owner. Team is created only after admin approval. */

@@ -51,6 +51,8 @@ export interface BallEvent {
    * - bye / leg_bye / penalty: full extra count
    */
   extra_runs?: number;
+  /** No-ball + bye / leg-bye combo (CricHeroes). */
+  secondary_extra_type?: "bye" | "leg_bye" | null;
   is_wicket?: boolean;
   wicket_type?: WicketType | null;
   dismissed_player_id?: string | null;

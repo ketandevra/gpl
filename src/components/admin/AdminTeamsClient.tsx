@@ -17,6 +17,16 @@ type AdminTeam = TeamRow & {
   players?: TeamPlayerView[];
 };
 
+function mergeTeamLists(prev: AdminTeam[], next: AdminTeam[]): AdminTeam[] {
+  return next.map((team) => {
+    const current = prev.find((row) => row.id === team.id);
+    return {
+      ...team,
+      players: team.players ?? current?.players,
+    };
+  });
+}
+
 type CaptainOption = {
   id: string;
   name: string;
@@ -26,14 +36,25 @@ type CaptainOption = {
   verification_status: string;
 };
 
+type TournamentOption = {
+  id: string;
+  name: string;
+  status: string;
+  is_active: boolean;
+};
+
 export function AdminTeamsClient({
   teams: initial,
   ownerRequests: initialRequests,
   squadSize,
+  tournaments = [],
+  defaultTournamentId = "",
 }: {
   teams: AdminTeam[];
   ownerRequests: TeamOwnerRequestView[];
   squadSize: number;
+  tournaments?: TournamentOption[];
+  defaultTournamentId?: string;
 }) {
   const router = useRouter();
   const [teams, setTeams] = useState(initial);
@@ -46,6 +67,7 @@ export function AdminTeamsClient({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [loadingSquadId, setLoadingSquadId] = useState<string | null>(null);
 
   const [name, setName] = useState("");
   const [shortName, setShortName] = useState("");
@@ -53,6 +75,7 @@ export function AdminTeamsClient({
   const [captainQuery, setCaptainQuery] = useState("");
   const [captains, setCaptains] = useState<CaptainOption[]>([]);
   const [creating, setCreating] = useState(false);
+  const [tournamentId, setTournamentId] = useState(defaultTournamentId);
 
   const [editName, setEditName] = useState("");
   const [editShort, setEditShort] = useState("");
@@ -61,7 +84,7 @@ export function AdminTeamsClient({
   const [savingTeam, setSavingTeam] = useState(false);
 
   useEffect(() => {
-    setTeams(initial);
+    setTeams((prev) => mergeTeamLists(prev, initial));
   }, [initial]);
 
   useEffect(() => {
@@ -87,9 +110,19 @@ export function AdminTeamsClient({
   }, []);
 
   const filtered = useMemo(() => {
-    if (filter === "all") return teams;
-    return teams.filter((t) => t.registration_status === filter);
-  }, [teams, filter]);
+    return teams.filter((t) => {
+      if (tournamentId && t.tournament_id !== tournamentId) return false;
+      if (filter !== "all" && t.registration_status !== filter) return false;
+      return true;
+    });
+  }, [teams, filter, tournamentId]);
+
+  const visibleOwnerRequests = useMemo(() => {
+    if (!tournamentId) return ownerRequests;
+    return ownerRequests.filter((row) => row.tournament_id === tournamentId);
+  }, [ownerRequests, tournamentId]);
+
+  const selectedTournament = tournaments.find((row) => row.id === tournamentId);
 
   const captainMatches = useMemo(() => {
     const q = captainQuery.trim().toLowerCase();
@@ -133,6 +166,7 @@ export function AdminTeamsClient({
           name: name.trim(),
           short_name: shortName.trim(),
           captain_id: captainId,
+          tournament_id: tournamentId || undefined,
         }),
       });
       const data = (await res.json()) as {
@@ -258,6 +292,33 @@ export function AdminTeamsClient({
     }
   }
 
+  async function loadSquad(teamId: string) {
+    setLoadingSquadId(teamId);
+    try {
+      const res = await fetch(`/api/teams/${teamId}/players`);
+      const data = (await res.json()) as {
+        error?: string;
+        players?: TeamPlayerView[];
+      };
+      if (!res.ok) {
+        setError(data.error ?? "Could not load squad.");
+        return;
+      }
+      const players = data.players ?? [];
+      setTeams((prev) =>
+        prev.map((team) =>
+          team.id === teamId
+            ? { ...team, players, player_count: players.length }
+            : team,
+        ),
+      );
+    } catch {
+      setError("Could not load squad.");
+    } finally {
+      setLoadingSquadId((current) => (current === teamId ? null : current));
+    }
+  }
+
   function openEditor(team: AdminTeam) {
     setExpandedId((id) => {
       const next = id === team.id ? null : team.id;
@@ -271,6 +332,9 @@ export function AdminTeamsClient({
             ? `${cap.name} · ${cap.mobile_number}`
             : team.manager_name ?? "",
         );
+        if (team.players === undefined) {
+          void loadSquad(team.id);
+        }
       }
       return next;
     });
@@ -374,11 +438,38 @@ export function AdminTeamsClient({
       </p>
       <h1 className="mt-2 text-2xl font-bold text-[#3e2723]">Teams</h1>
       <p className="mt-1 text-sm text-[#3e2723]/60">
-        Review owner requests, create teams, edit name/captain/squad, or delete
-        a team. Captains can also invite players; admins add them directly.
+        Pick a tournament (including completed ones), then create teams and add
+        players. The same verified user can play in more than one edition.
       </p>
 
-      {ownerRequests.length > 0 ? (
+      {tournaments.length > 0 ? (
+        <label className="mt-5 block">
+          <span className="mb-1 block text-sm text-[#3e2723]/70">
+            Tournament
+          </span>
+          <select
+            className="field-select"
+            value={tournamentId}
+            onChange={(e) => setTournamentId(e.target.value)}
+          >
+            {tournaments.map((row) => (
+              <option key={row.id} value={row.id}>
+                {row.name}
+                {row.is_active ? " · current" : ""}
+                {row.status === "completed" ? " · completed" : ""}
+              </option>
+            ))}
+          </select>
+          {selectedTournament?.status === "completed" ? (
+            <p className="mt-1 text-xs text-[#8a6500]">
+              Adding a team here is for the past edition. Add the squad, then
+              create matches under this tournament so profiles get career stats.
+            </p>
+          ) : null}
+        </label>
+      ) : null}
+
+      {visibleOwnerRequests.length > 0 ? (
         <section className="mt-6 rounded-2xl border border-[#c9a227]/40 bg-[#c9a227]/10 p-5">
           <h2 className="font-semibold text-[#3e2723]">Owner requests</h2>
           <p className="mt-1 text-sm text-[#3e2723]/65">
@@ -386,7 +477,7 @@ export function AdminTeamsClient({
             players can submit a new request.
           </p>
           <ul className="mt-4 space-y-3">
-            {ownerRequests.map((row) => (
+            {visibleOwnerRequests.map((row) => (
               <li
                 key={row.id}
                 className="rounded-xl border border-[#3e2723]/10 bg-white p-4"
@@ -715,25 +806,29 @@ export function AdminTeamsClient({
                   </button>
                 </div>
 
-                <ManageSquadClient
-                  teamId={team.id}
-                  initialPlayers={team.players ?? []}
-                  initialInvites={[]}
-                  canEdit
-                  approved={team.approved}
-                  squadSize={squadSize}
-                  adminOverride
-                  compact
-                  onRosterChange={(players) =>
-                    setTeams((prev) =>
-                      prev.map((t) =>
-                        t.id === team.id
-                          ? { ...t, players, player_count: players.length }
-                          : t,
-                      ),
-                    )
-                  }
-                />
+                {loadingSquadId === team.id && team.players === undefined ? (
+                  <p className="text-sm text-[#3e2723]/60">Loading squad…</p>
+                ) : (
+                  <ManageSquadClient
+                    teamId={team.id}
+                    initialPlayers={team.players ?? []}
+                    initialInvites={[]}
+                    canEdit
+                    approved={team.approved}
+                    squadSize={squadSize}
+                    adminOverride
+                    compact
+                    onRosterChange={(players) =>
+                      setTeams((prev) =>
+                        prev.map((t) =>
+                          t.id === team.id
+                            ? { ...t, players, player_count: players.length }
+                            : t,
+                        ),
+                      )
+                    }
+                  />
+                )}
               </div>
             ) : null}
 

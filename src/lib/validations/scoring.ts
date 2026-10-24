@@ -14,9 +14,15 @@ export const setPlayersSchema = z.object({
 });
 
 export const recordBallSchema = z.object({
-  batsman_runs: z.number().int().min(0).max(6).optional().default(0),
+  batsman_runs: z.number().int().min(0).max(7).optional().default(0),
   extra_type: z
     .enum(["wide", "no_ball", "bye", "leg_bye", "penalty"])
+    .nullable()
+    .optional()
+    .default(null),
+  /** No-ball + bye / leg-bye (CricHeroes combo). */
+  secondary_extra_type: z
+    .enum(["bye", "leg_bye"])
     .nullable()
     .optional()
     .default(null),
@@ -38,6 +44,9 @@ export const recordBallSchema = z.object({
     .optional(),
   dismissed_player_id: z.string().uuid().nullable().optional(),
   new_batsman_id: z.string().uuid().nullable().optional(),
+  fielder_id: z.string().uuid().nullable().optional(),
+  assist_fielder_id: z.string().uuid().nullable().optional(),
+  is_caught_behind: z.boolean().optional().default(false),
   commentary: z.string().max(280).nullable().optional(),
 });
 

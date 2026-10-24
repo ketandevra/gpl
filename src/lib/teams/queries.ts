@@ -111,6 +111,21 @@ export async function listApprovedTeams(): Promise<TeamRow[]> {
   );
 }
 
+/** Teams an admin can put in a fixture (pending or approved). */
+export async function listMatchableTeams(
+  tournamentId?: string | null,
+): Promise<TeamRow[]> {
+  if (!isSupabaseAdminConfigured()) return [];
+  const tournamentFilter = tournamentId
+    ? `&tournament_id=eq.${encodeURIComponent(tournamentId)}`
+    : "";
+  return withRetry(() =>
+    adminRest<TeamRow[]>("teams", {
+      query: `?registration_status=in.(pending,approved)${tournamentFilter}&select=*&order=name.asc`,
+    }),
+  );
+}
+
 /** Pending + approved teams for the public teams page (excludes rejected). */
 export async function listPublicTeams(
   tournamentId?: string | null,
@@ -131,6 +146,55 @@ export async function listAllTeams(): Promise<TeamRow[]> {
       query: "?select=*&order=created_at.desc",
     }),
   );
+}
+
+export type AdminTeamSummary = TeamRow & {
+  manager_name: string | null;
+  player_count: number;
+};
+
+/** Teams with captain names and squad counts — no per-team roster fetches. */
+export async function listAdminTeamSummaries(): Promise<AdminTeamSummary[]> {
+  const teams = await listAllTeams();
+  if (!teams.length) return [];
+
+  const managerIds = [
+    ...new Set(
+      teams
+        .map((team) => team.manager_id)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
+  const teamIds = teams.map((team) => team.id);
+
+  const [users, memberships] = await Promise.all([
+    managerIds.length
+      ? withRetry(() =>
+          adminRest<Array<{ id: string; name: string }>>("users", {
+            query: `?id=in.(${managerIds.join(",")})&select=id,name`,
+          }),
+        )
+      : Promise.resolve([]),
+    withRetry(() =>
+      adminRest<Array<{ team_id: string }>>("team_players", {
+        query: `?team_id=in.(${teamIds.join(",")})&select=team_id`,
+      }),
+    ),
+  ]);
+
+  const nameById = new Map(users.map((user) => [user.id, user.name]));
+  const countByTeam = new Map<string, number>();
+  for (const row of memberships) {
+    countByTeam.set(row.team_id, (countByTeam.get(row.team_id) ?? 0) + 1);
+  }
+
+  return teams.map((team) => ({
+    ...team,
+    manager_name: team.manager_id
+      ? (nameById.get(team.manager_id) ?? null)
+      : null,
+    player_count: countByTeam.get(team.id) ?? 0,
+  }));
 }
 
 /** Teams where this user is captain (manager_id). */
@@ -336,7 +400,24 @@ export async function searchVerifiedPlayersForPicker(
     }),
   );
 
-  // Player rows are created when admin verifies the user.
+  const foundUsers = new Set(
+    players.map((p) => p.user_id).filter((id): id is string => Boolean(id)),
+  );
+  const missing = userIds.filter((id) => !foundUsers.has(id));
+  if (missing.length) {
+    const other = await withRetry(() =>
+      adminRest<PlayerRow[]>("players", {
+        query: `?user_id=in.(${missing.join(",")})&select=*&order=created_at.desc`,
+      }),
+    );
+    const seen = new Set<string>();
+    for (const row of other) {
+      if (!row.user_id || seen.has(row.user_id)) continue;
+      seen.add(row.user_id);
+      players.push({ ...row, locked_team_id: null });
+    }
+  }
+
   players = players.slice(0, limit);
   if (!players.length) return [];
 

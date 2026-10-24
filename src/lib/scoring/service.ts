@@ -1,6 +1,7 @@
 import { writeAuditLog } from "@/lib/auth/audit";
 import type { SessionUser } from "@/lib/auth/permissions";
 import { applyBall } from "@/lib/scoring/engine";
+import { cricheroesBallEvent } from "@/lib/scoring/event";
 import type { BallEvent } from "@/lib/scoring/types";
 import {
   canScoreMatch,
@@ -12,7 +13,16 @@ import {
   type InningsRow,
 } from "@/lib/scoring/queries";
 import { getMatchById, listInningsForMatch } from "@/lib/matches/queries";
-import { adminRest, withRetry } from "@/lib/supabase/rest";
+import {
+  battingTeamForNextInnings,
+  isBattingTeamLocked,
+  isSuperOverInnings,
+  otherTeamId,
+  regulationScoresTied,
+  superOverMaxWickets,
+} from "@/lib/scoring/sides";
+import { listPlayersByTeam } from "@/lib/teams/queries";
+import { adminRest, RestError, withRetry } from "@/lib/supabase/rest";
 import type {
   RecordBallInput,
   SetPlayersInput,
@@ -47,23 +57,16 @@ async function loadFullInnings(matchId: string): Promise<InningsRow[]> {
 }
 
 function toBallEvent(input: RecordBallInput): BallEvent {
-  const extra = input.extra_type ?? null;
-  let extra_runs = input.extra_runs;
-  if (extra === "wide" || extra === "no_ball") {
-    extra_runs = Math.max(1, extra_runs ?? 1);
-  } else if (extra === "bye" || extra === "leg_bye" || extra === "penalty") {
-    extra_runs = extra_runs ?? input.batsman_runs ?? 0;
-  }
-
-  return {
-    batsman_runs: input.batsman_runs,
-    extra_type: extra,
-    extra_runs,
+  return cricheroesBallEvent({
+    runs: input.batsman_runs,
+    extra_type: input.extra_type,
+    extra_runs: input.extra_runs,
+    secondary_extra_type: input.secondary_extra_type,
     is_wicket: input.is_wicket,
     wicket_type: input.wicket_type,
     dismissed_player_id: input.dismissed_player_id,
     new_batter_id: input.new_batsman_id,
-  };
+  });
 }
 
 export async function startInnings(
@@ -84,9 +87,34 @@ export async function startInnings(
     };
   }
 
+  const existing = await loadFullInnings(matchId);
+  if (existing.some((i) => i.status === "in_progress")) {
+    return { error: "An innings is already in progress.", status: 400 };
+  }
+  if (existing.length >= 6) {
+    return { error: "No further Super Overs can be started.", status: 400 };
+  }
+  if (existing.length >= 2) {
+    const tied = regulationScoresTied(existing);
+    const alreadySuperOver = existing.some((row) =>
+      isSuperOverInnings(row.innings_number),
+    );
+    const adminOpenedSuperOver =
+      match.status === "live" &&
+      (match.result_text ?? "").toLowerCase().includes("super over");
+    if (!tied && !alreadySuperOver && !adminOpenedSuperOver) {
+      return { error: "Both innings are already recorded.", status: 400 };
+    }
+  }
+
+  const expectedBatting = battingTeamForNextInnings(match, existing);
+  const batting_team_id = isBattingTeamLocked(match, existing)
+    ? expectedBatting
+    : input.batting_team_id;
+
   if (
-    input.batting_team_id !== match.team_a_id &&
-    input.batting_team_id !== match.team_b_id
+    batting_team_id !== match.team_a_id &&
+    batting_team_id !== match.team_b_id
   ) {
     return { error: "Batting team must be one of the match teams.", status: 400 };
   }
@@ -95,19 +123,29 @@ export async function startInnings(
     return { error: "Striker and non-striker must be different.", status: 400 };
   }
 
-  const existing = await loadFullInnings(matchId);
-  if (existing.some((i) => i.status === "in_progress")) {
-    return { error: "An innings is already in progress.", status: 400 };
+  const bowling_team_id = otherTeamId(match, batting_team_id);
+  const [battingSquad, bowlingSquad] = await Promise.all([
+    listPlayersByTeam(batting_team_id),
+    listPlayersByTeam(bowling_team_id),
+  ]);
+  const battingIds = new Set(battingSquad.map((p) => p.id));
+  const bowlingIds = new Set(bowlingSquad.map((p) => p.id));
+  if (!battingIds.has(input.striker_id) || !battingIds.has(input.non_striker_id)) {
+    return {
+      error: "Striker and non-striker must be from the batting team.",
+      status: 400,
+    };
   }
-  if (existing.length >= 2) {
-    return { error: "Both innings are already recorded.", status: 400 };
+  if (!bowlingIds.has(input.bowler_id)) {
+    return { error: "Bowler must be from the bowling team.", status: 400 };
   }
-
-  const bowling_team_id =
-    input.batting_team_id === match.team_a_id ? match.team_b_id : match.team_a_id;
-  const innings_number = (existing.length + 1) as 1 | 2;
+  const innings_number = existing.length + 1;
+  const previous = existing[existing.length - 1];
   const target_runs =
-    innings_number === 2 ? (existing[0]?.total_runs ?? 0) + 1 : null;
+    innings_number === 2 ||
+    (isSuperOverInnings(innings_number) && innings_number % 2 === 0)
+      ? (previous?.total_runs ?? 0) + 1
+      : null;
 
   try {
     const created = await withRetry(() =>
@@ -117,7 +155,7 @@ export async function startInnings(
         body: [
           {
             match_id: matchId,
-            batting_team_id: input.batting_team_id,
+            batting_team_id,
             bowling_team_id,
             innings_number,
             target_runs,
@@ -152,7 +190,7 @@ export async function startInnings(
       newValue: {
         match_id: matchId,
         innings_number,
-        batting_team_id: input.batting_team_id,
+        batting_team_id,
       },
     });
 
@@ -161,6 +199,68 @@ export async function startInnings(
   } catch (err) {
     console.error("[scoring] startInnings failed:", err);
     return { error: "Could not start innings.", status: 500 };
+  }
+}
+
+export async function startSuperOver(
+  user: SessionUser,
+  matchId: string,
+): Promise<Result> {
+  const denied = await requireScorer(user, matchId);
+  if (denied) return denied;
+
+  const match = await getMatchById(matchId);
+  if (!match) return { error: "Match not found.", status: 404 };
+
+  const existing = await loadFullInnings(matchId);
+  const alreadySuperOver = existing.some((row) =>
+    isSuperOverInnings(row.innings_number),
+  );
+  const resultTied = (match.result_text ?? "").toLowerCase().includes("tied");
+  const tied =
+    (!match.winner_team_id &&
+      (match.status === "completed" || regulationScoresTied(existing))) ||
+    resultTied;
+
+  if (
+    ["live", "innings_break"].includes(match.status) &&
+    (alreadySuperOver ||
+      (match.result_text ?? "").toLowerCase().includes("super over"))
+  ) {
+    const board = await getScoreboard(matchId, user);
+    return { ok: true, board: board! };
+  }
+
+  if (!tied && !alreadySuperOver) {
+    return { error: "Super Over is only available after a tie.", status: 400 };
+  }
+
+  try {
+    await withRetry(() =>
+      adminRest("matches", {
+        method: "PATCH",
+        query: `?id=eq.${encodeURIComponent(matchId)}`,
+        prefer: "return=minimal",
+        body: {
+          status: "live" satisfies MatchStatus,
+          winner_team_id: null,
+          result_text: "Super Over",
+        },
+      }),
+    );
+    await writeAuditLog({
+      actorId: user.id,
+      action: "match.start_super_over",
+      entityType: "match",
+      entityId: matchId,
+      previousValue: { status: match.status, result_text: match.result_text },
+      newValue: { status: "live", result_text: "Super Over" },
+    });
+    const board = await getScoreboard(matchId, user);
+    return { ok: true, board: board! };
+  } catch (err) {
+    console.error("[scoring] startSuperOver failed:", err);
+    return { error: "Could not start Super Over.", status: 500 };
   }
 }
 
@@ -238,9 +338,29 @@ export async function recordBall(
   }
   if (
     input.is_wicket &&
+    (input.wicket_type === "caught" ||
+      input.wicket_type === "stumped" ||
+      input.wicket_type === "run_out") &&
+    !input.fielder_id
+  ) {
+    return {
+      error:
+        input.wicket_type === "stumped"
+          ? "Select the wicket-keeper."
+          : input.wicket_type === "run_out"
+            ? "Select the fielder for the run out."
+            : "Select the catcher.",
+      status: 400,
+    };
+  }
+  if (
+    input.is_wicket &&
     input.wicket_type !== "retired_hurt" &&
     !input.new_batsman_id &&
-    current.wickets < 9
+    current.wickets < (isSuperOverInnings(current.innings_number)
+      ? superOverMaxWickets()
+      : 10) -
+      1
   ) {
     return { error: "Select the new batsman.", status: 400 };
   }
@@ -267,34 +387,63 @@ export async function recordBall(
     next.legal_balls % 6 === 0 &&
     next.status !== "completed";
 
+  const ballRow = {
+    innings_id: current.id,
+    sequence_no: ball.sequence_no,
+    over_number: ball.over_number,
+    ball_in_over: ball.ball_in_over,
+    striker_id: ball.striker_id,
+    non_striker_id: ball.non_striker_id,
+    bowler_id: ball.bowler_id,
+    batsman_runs: ball.batsman_runs,
+    extra_runs: ball.extra_runs,
+    total_runs: ball.total_runs,
+    is_legal_delivery: ball.is_legal_delivery,
+    extra_type: ball.extra_type,
+    is_wicket: ball.is_wicket,
+    wicket_type: ball.wicket_type,
+    dismissed_player_id: ball.dismissed_player_id,
+    fielder_id: input.fielder_id ?? null,
+    assist_fielder_id: input.assist_fielder_id ?? null,
+    is_caught_behind: Boolean(
+      input.is_wicket &&
+        input.wicket_type === "caught" &&
+        input.is_caught_behind,
+    ),
+    free_hit_next: ball.free_hit_next,
+    commentary: input.commentary ?? null,
+  };
+
   try {
-    await withRetry(() =>
-      adminRest("balls", {
-        method: "POST",
-        prefer: "return=minimal",
-        body: [
-          {
-            innings_id: current.id,
-            sequence_no: ball.sequence_no,
-            over_number: ball.over_number,
-            ball_in_over: ball.ball_in_over,
-            striker_id: ball.striker_id,
-            non_striker_id: ball.non_striker_id,
-            bowler_id: ball.bowler_id,
-            batsman_runs: ball.batsman_runs,
-            extra_runs: ball.extra_runs,
-            total_runs: ball.total_runs,
-            is_legal_delivery: ball.is_legal_delivery,
-            extra_type: ball.extra_type,
-            is_wicket: ball.is_wicket,
-            wicket_type: ball.wicket_type,
-            dismissed_player_id: ball.dismissed_player_id,
-            free_hit_next: ball.free_hit_next,
-            commentary: input.commentary ?? null,
-          },
-        ],
-      }),
-    );
+    try {
+      await withRetry(() =>
+        adminRest("balls", {
+          method: "POST",
+          prefer: "return=minimal",
+          body: [ballRow],
+        }),
+      );
+    } catch (err) {
+      const missingFielderCols =
+        err instanceof RestError &&
+        /fielder_id|assist_fielder_id|is_caught_behind|PGRST204/i.test(
+          err.message,
+        );
+      if (!missingFielderCols) throw err;
+      const {
+        fielder_id: _f,
+        assist_fielder_id: _a,
+        is_caught_behind: _c,
+        ...legacyRow
+      } = ballRow;
+      await withRetry(() =>
+        adminRest("balls", {
+          method: "POST",
+          prefer: "return=minimal",
+          body: [legacyRow],
+        }),
+      );
+    }
 
     await withRetry(() =>
       adminRest("innings", {
@@ -360,7 +509,7 @@ async function maybeAdvanceMatch(
     max_wickets: number;
   },
 ) {
-  if (finished.innings_number === 1) {
+  if (finished.innings_number === 1 || finished.innings_number % 2 === 1) {
     await withRetry(() =>
       adminRest("matches", {
         method: "PATCH",
@@ -368,7 +517,9 @@ async function maybeAdvanceMatch(
         prefer: "return=minimal",
         body: {
           status: "innings_break" satisfies MatchStatus,
-          result_text: null,
+          result_text: isSuperOverInnings(finished.innings_number)
+            ? "Super Over"
+            : null,
         },
       }),
     );
@@ -377,20 +528,29 @@ async function maybeAdvanceMatch(
       action: "match.innings_break",
       entityType: "match",
       entityId: matchId,
-      newValue: { reason: "First innings complete" },
+      newValue: {
+        reason: isSuperOverInnings(finished.innings_number)
+          ? "Super Over first innings complete"
+          : "First innings complete",
+      },
     });
     return;
   }
 
-  const first = inningsList.find((i) => i.innings_number === 1);
   const match = await getMatchById(matchId);
-  if (!match || !first) return;
+  if (!match) return;
 
   const chaseTeam = finished.batting_team_id;
   const defendTeam = finished.bowling_team_id;
-  const target = finished.target_runs ?? first.total_runs + 1;
+  const previous = inningsList.find(
+    (i) => i.innings_number === finished.innings_number - 1,
+  );
+  if (!previous) return;
+
+  const target = finished.target_runs ?? previous.total_runs + 1;
   let winner_team_id: string | null = null;
   let result_text = "Match completed";
+  const superOver = isSuperOverInnings(finished.innings_number);
 
   const chaseName =
     chaseTeam === match.team_a_id ? match.team_a?.name : match.team_b?.name;
@@ -400,14 +560,34 @@ async function maybeAdvanceMatch(
   if (finished.total_runs >= target) {
     winner_team_id = chaseTeam;
     const wicketsLeft = Math.max(0, finished.max_wickets - finished.wickets);
-    result_text = `${chaseName} won by ${wicketsLeft} wicket${wicketsLeft === 1 ? "" : "s"}`;
+    result_text = superOver
+      ? `${chaseName} won in Super Over`
+      : `${chaseName} won by ${wicketsLeft} wicket${wicketsLeft === 1 ? "" : "s"}`;
   } else if (finished.total_runs === target - 1) {
     winner_team_id = null;
-    result_text = "Match tied";
+    result_text = superOver ? "Super Over tied" : "Match tied";
   } else {
     winner_team_id = defendTeam;
     const margin = target - 1 - finished.total_runs;
-    result_text = `${defendName} won by ${margin} run${margin === 1 ? "" : "s"}`;
+    result_text = superOver
+      ? `${defendName} won in Super Over`
+      : `${defendName} won by ${margin} run${margin === 1 ? "" : "s"}`;
+  }
+
+  if (superOver && !winner_team_id) {
+    await withRetry(() =>
+      adminRest("matches", {
+        method: "PATCH",
+        query: `?id=eq.${encodeURIComponent(matchId)}`,
+        prefer: "return=minimal",
+        body: {
+          status: "innings_break" satisfies MatchStatus,
+          winner_team_id: null,
+          result_text: "Super Over tied — another Super Over",
+        },
+      }),
+    );
+    return;
   }
 
   await withRetry(() =>

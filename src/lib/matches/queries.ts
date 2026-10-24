@@ -8,6 +8,7 @@ import type {
   MatchRow,
   MatchView,
   TeamBrief,
+  TournamentBrief,
 } from "@/lib/matches/types";
 
 export type {
@@ -37,9 +38,23 @@ async function loadTeamMap(ids: string[]): Promise<Map<string, TeamBrief>> {
   return new Map(teams.map((t) => [t.id, t]));
 }
 
+async function loadTournamentMap(
+  ids: string[],
+): Promise<Map<string, TournamentBrief>> {
+  const unique = [...new Set(ids.filter(Boolean))];
+  if (!unique.length) return new Map();
+  const rows = await withRetry(() =>
+    adminRest<TournamentBrief[]>("tournaments", {
+      query: `?id=in.(${unique.join(",")})&select=id,name,short_name`,
+    }),
+  );
+  return new Map(rows.map((row) => [row.id, row]));
+}
+
 function toMatchView(
   match: MatchRow,
   teamMap: Map<string, TeamBrief>,
+  tournamentMap: Map<string, TournamentBrief>,
 ): MatchView {
   return {
     ...match,
@@ -51,6 +66,7 @@ function toMatchView(
     winner: match.winner_team_id
       ? teamMap.get(match.winner_team_id) ?? null
       : null,
+    tournament: tournamentMap.get(match.tournament_id) ?? null,
   };
 }
 
@@ -72,16 +88,19 @@ export async function listMatches(options?: {
   );
   if (!matches.length) return [];
 
-  const teamMap = await loadTeamMap(
-    matches.flatMap((m) => [
-      m.team_a_id,
-      m.team_b_id,
-      m.toss_winner_id ?? "",
-      m.winner_team_id ?? "",
-    ]),
-  );
+  const [teamMap, tournamentMap] = await Promise.all([
+    loadTeamMap(
+      matches.flatMap((m) => [
+        m.team_a_id,
+        m.team_b_id,
+        m.toss_winner_id ?? "",
+        m.winner_team_id ?? "",
+      ]),
+    ),
+    loadTournamentMap(matches.map((m) => m.tournament_id)),
+  ]);
 
-  return matches.map((m) => toMatchView(m, teamMap));
+  return matches.map((m) => toMatchView(m, teamMap, tournamentMap));
 }
 
 export async function getMatchById(id: string): Promise<MatchView | null> {
@@ -93,13 +112,16 @@ export async function getMatchById(id: string): Promise<MatchView | null> {
   );
   const match = rows[0];
   if (!match) return null;
-  const teamMap = await loadTeamMap([
-    match.team_a_id,
-    match.team_b_id,
-    match.toss_winner_id ?? "",
-    match.winner_team_id ?? "",
+  const [teamMap, tournamentMap] = await Promise.all([
+    loadTeamMap([
+      match.team_a_id,
+      match.team_b_id,
+      match.toss_winner_id ?? "",
+      match.winner_team_id ?? "",
+    ]),
+    loadTournamentMap([match.tournament_id]),
   ]);
-  return toMatchView(match, teamMap);
+  return toMatchView(match, teamMap, tournamentMap);
 }
 
 export async function listInningsForMatch(

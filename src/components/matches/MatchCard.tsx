@@ -43,6 +43,12 @@ export function MatchCard({ match }: MatchCardProps) {
         </span>
       </div>
 
+      {match.tournament?.name ? (
+        <p className="mt-2 text-[11px] font-semibold uppercase tracking-wide text-[#1a7f84]">
+          {match.tournament.name}
+        </p>
+      ) : null}
+
       <p className="mt-3 text-lg font-semibold text-[#3e2723]">
         {match.team_a?.name ?? "Team A"}{" "}
         <span className="font-normal text-[#3e2723]/40">vs</span>{" "}

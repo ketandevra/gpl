@@ -1,3 +1,4 @@
+import { runsAgainstBowler } from "@/lib/scoring/event";
 import { oversFromLegalBallsDecimal } from "@/lib/stats/points";
 import type {
   StatsBallRow,
@@ -48,15 +49,7 @@ function ballsFacedForBatsman(ball: StatsBallRow): boolean {
 }
 
 function bowlerRunsConceded(ball: StatsBallRow): number {
-  // Byes / leg byes / penalties are not charged to the bowler.
-  if (
-    ball.extra_type === "bye" ||
-    ball.extra_type === "leg_bye" ||
-    ball.extra_type === "penalty"
-  ) {
-    return ball.batsman_runs;
-  }
-  return ball.total_runs;
+  return runsAgainstBowler(ball);
 }
 
 function teamLookup(teams: StatsTeamRow[]) {

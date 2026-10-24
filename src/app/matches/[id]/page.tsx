@@ -5,13 +5,12 @@ import { BackLink } from "@/components/ui/BackLink";
 import {
   formatMatchWhen,
   getMatchById,
-  listInningsForMatch,
   LIVE_MATCH_STATUSES,
   matchStatusLabel,
 } from "@/lib/matches/queries";
 import { isSupabaseAdminConfigured } from "@/lib/supabase/env";
 import { getCurrentUser } from "@/lib/auth/session";
-import { canScoreMatch } from "@/lib/scoring/queries";
+import { canScoreMatch, getScoreboard } from "@/lib/scoring/queries";
 
 type PageProps = { params: Promise<{ id: string }> };
 
@@ -43,75 +42,79 @@ export default async function MatchDetailPage({ params }: PageProps) {
   const match = await getMatchById(id);
   if (!match) notFound();
 
-  const innings = await listInningsForMatch(id);
   const isLive = LIVE_MATCH_STATUSES.includes(match.status);
   const user = await getCurrentUser();
-  const showScoreLink = user ? await canScoreMatch(user, id) : false;
+  const [showScoreLink, board] = await Promise.all([
+    user ? canScoreMatch(user, id) : Promise.resolve(false),
+    getScoreboard(id, user),
+  ]);
 
   return (
-    <div className="mx-auto max-w-3xl px-4 py-8 pb-20">
-      <BackLink href={isLive ? "/live" : "/matches"}>
-        {isLive ? "All live matches" : "All matches"}
-      </BackLink>
-
-      {isLive ? (
-        <p className="mt-5 inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-[0.2em] text-[#d81b60]">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-[#d81b60]" />
-          {match.status === "innings_break" ? "Innings break" : "Live"}
-        </p>
-      ) : (
-        <p className="mt-5 text-xs font-semibold uppercase tracking-[0.2em] text-[#2aa7ad]">
-          {matchStatusLabel(match.status)}
-        </p>
-      )}
-
-      <h1 className="mt-2 text-2xl font-bold text-[#3e2723] sm:text-3xl">
-        {match.team_a?.name ?? "Team A"} vs {match.team_b?.name ?? "Team B"}
-      </h1>
-
-      <div className="mt-3 space-y-1 text-sm text-[#3e2723]/65">
-        <p>{formatMatchWhen(match.scheduled_at)}</p>
-        {match.venue ? <p>{match.venue}</p> : null}
-        <p>
-          {match.overs_per_innings} overs ·{" "}
-          <span className="capitalize">{match.match_type}</span>
-        </p>
+    <div className="mx-auto max-w-3xl px-4 py-6 pb-20">
+      <div className="flex items-center justify-between gap-3">
+        <BackLink href={isLive ? "/live" : "/matches"}>
+          {isLive ? "Live" : "Matches"}
+        </BackLink>
+        {showScoreLink &&
+        (isLive ||
+          (match.status === "completed" && !match.winner_team_id)) ? (
+          <Link
+            href={`/score/${match.id}`}
+            className="rounded-full bg-[#d81b60] px-4 py-2 text-xs font-bold text-white"
+          >
+            {match.status === "completed" && !match.winner_team_id
+              ? "Super Over"
+              : "Score"}
+          </Link>
+        ) : null}
       </div>
 
-      {match.toss_winner ? (
-        <p className="mt-4 text-sm text-[#3e2723]/70">
-          Toss: {match.toss_winner.name} elected to {match.toss_decision}
-        </p>
-      ) : null}
-
-      {showScoreLink && isLive ? (
-        <Link
-          href={`/score/${match.id}`}
-          className="mt-5 inline-flex rounded-full bg-[#d81b60] px-5 py-2.5 text-sm font-bold text-white"
-        >
-          Open scorer
-        </Link>
-      ) : null}
-
-      <section className="mt-8">
-        <h2 className="mb-3 text-lg font-semibold text-[#3e2723]">Score</h2>
-        {isLive || innings.length > 0 ? (
-          <LiveMatchPanel
-            matchId={match.id}
-            initialInnings={innings}
-            teamAId={match.team_a_id}
-            teamAName={match.team_a?.name ?? "Team A"}
-            teamBName={match.team_b?.name ?? "Team B"}
-            status={match.status}
-            resultText={match.result_text}
-          />
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        {isLive ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#d81b60]/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#d81b60]">
+            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#d81b60]" />
+            {match.result_text?.toLowerCase().includes("super over")
+              ? "Super Over"
+              : match.status === "innings_break"
+                ? "Break"
+                : "Live"}
+          </span>
         ) : (
-          <p className="rounded-xl border border-[#f5b830]/40 bg-[#fff6df] px-4 py-3 text-sm text-[#3e2723]">
+          <span className="rounded-full bg-[#2aa7ad]/12 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-[#1a7f84]">
+            {matchStatusLabel(match.status)}
+          </span>
+        )}
+        {match.tournament?.name ? (
+          <span className="rounded-full bg-[#2aa7ad]/12 px-2.5 py-1 text-[11px] font-semibold text-[#1a7f84]">
+            {match.tournament.name}
+          </span>
+        ) : null}
+        <span className="rounded-full bg-[#3e2723]/6 px-2.5 py-1 text-[11px] font-semibold capitalize text-[#3e2723]/55">
+          {match.match_type} · {match.overs_per_innings} ov
+        </span>
+      </div>
+
+      <h1 className="mt-3 text-xl font-bold leading-snug text-[#3e2723] sm:text-[1.65rem]">
+        {match.team_a?.name ?? "Team A"}
+        <span className="mx-2 align-middle text-sm font-semibold text-[#3e2723]/30">
+          vs
+        </span>
+        {match.team_b?.name ?? "Team B"}
+      </h1>
+      <p className="mt-1.5 text-sm leading-5 text-[#3e2723]/50">
+        {match.venue ? `${match.venue} · ` : ""}
+        {formatMatchWhen(match.scheduled_at)}
+      </p>
+
+      <section className="mt-5">
+        {board ? (
+          <LiveMatchPanel matchId={match.id} initial={board} />
+        ) : (
+          <p className="rounded-2xl border border-[#f5b830]/40 bg-[#fff6df] px-4 py-4 text-sm text-[#3e2723]">
             Match not started yet.
           </p>
         )}
       </section>
-
     </div>
   );
 }

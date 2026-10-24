@@ -16,6 +16,8 @@ import {
 } from "@/lib/teams/queries";
 import { formatUnverifiedPlayers } from "@/lib/verification/helpers";
 import { shortNameFromTeamName } from "@/lib/teams/labels";
+import { getTournamentById } from "@/lib/tournaments/queries";
+import { publicCodeForIdentity } from "@/lib/teams/player-records";
 
 import type {
   adminCreateTeamSchema,
@@ -67,9 +69,11 @@ export async function createTeamByAdmin(
     return { error: "Only admins can create teams.", status: 403 };
   }
 
-  const tournament = await getActiveTournament();
+  const tournament = input.tournament_id
+    ? await getTournamentById(input.tournament_id)
+    : await getActiveTournament();
   if (!tournament) {
-    return { error: "No active tournament found.", status: 400 };
+    return { error: "Select a tournament.", status: 400 };
   }
 
   const captains = await withRetry(() =>
@@ -635,17 +639,16 @@ export async function createTournamentPlayer(
   }
 
   try {
-    const existing = await withRetry(() =>
-      adminRest<Array<{ public_code: string }>>("players", {
-        query: `?tournament_id=eq.${encodeURIComponent(tournament.id)}&select=public_code&order=public_code.desc&limit=50`,
-      }),
-    );
-    let max = 0;
-    for (const row of existing) {
-      const m = /^P(\d+)$/i.exec(row.public_code);
-      if (m) max = Math.max(max, Number(m[1]));
-    }
-    const public_code = `P${String(max + 1).padStart(3, "0")}`;
+    const public_code = await publicCodeForIdentity({
+      mobile_number: input.mobile_number ?? null,
+    });
+    const linked = input.mobile_number
+      ? await withRetry(() =>
+          adminRest<Array<{ id: string }>>("users", {
+            query: `?mobile_number=eq.${encodeURIComponent(input.mobile_number)}&select=id&limit=1`,
+          }),
+        )
+      : [];
 
     const created = await withRetry(() =>
       adminRest<PlayerRow[]>("players", {
@@ -657,6 +660,7 @@ export async function createTournamentPlayer(
             public_code,
             name: input.name,
             mobile_number: input.mobile_number ?? null,
+            user_id: linked[0]?.id ?? null,
             role: input.role ?? "batsman",
             batting_style: input.batting_style ?? null,
             bowling_style: input.bowling_style ?? null,
